@@ -1,0 +1,13 @@
+{
+  "site_id": "hostloc",
+  "site_name": "HostLoc",
+  "site_url": "https://hostloc.com",
+  "engine_type": "browser",
+  "login_type": "manual",
+  "steps": [
+    { "type": "goto", "url": "https://hostloc.com/home.php?mod=spacecp&ac=credit&op=base" },
+    { "type": "condition", "check": { "selector_text": "签到" }, "then": [{ "type": "try_catch", "try": [{ "type": "click", "selector": "a[href*=sign]" }, { "type": "wait", "ms": 1500 }], "catch": [{ "type": "screenshot", "name": "hostloc-error" }] }], "else": [{ "type": "log", "message": "今日已签到" }] }
+  ],
+  "success_rules": [{ "type": "body_regex", "value": "签到成功|已签到|积分" }],
+  "cookie_domains": ["hostloc.com", ".hostloc.com"]
+}

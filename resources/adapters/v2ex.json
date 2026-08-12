@@ -1,0 +1,22 @@
+{
+  "site_id": "v2ex",
+  "site_name": "V2EX",
+  "site_url": "https://www.v2ex.com",
+  "engine_type": "hybrid",
+  "login_type": "cookie",
+  "request": {
+    "method": "POST",
+    "url": "https://www.v2ex.com/api/mission/daily/redeem",
+    "headers": { "Accept": "application/json", "Referer": "https://www.v2ex.com/mission/daily" },
+    "timeout_ms": 30000
+  },
+  "steps": [
+    { "type": "try_catch", "try": [{ "type": "goto", "url": "https://www.v2ex.com/mission/daily" }, { "type": "condition", "check": { "selector_text": ".topic_content" }, "then": [{ "type": "click", "selector": "input[type=button]" }], "else": [{ "type": "log", "message": "今日可能已签到" }] }], "catch": [{ "type": "screenshot", "name": "v2ex-error" }] }
+  ],
+  "success_rules": [
+    { "type": "status", "value": 200 },
+    { "type": "body_regex", "value": "success|already|每日登录奖励已领取|已领取" }
+  ],
+  "success_logic": "and",
+  "cookie_domains": ["www.v2ex.com", ".v2ex.com"]
+}

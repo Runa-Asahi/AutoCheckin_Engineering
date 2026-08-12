@@ -1,0 +1,13 @@
+{
+  "site_id": "hifini",
+  "site_name": "HiFiNi 音乐磁场",
+  "site_url": "https://www.hifini.com",
+  "engine_type": "browser",
+  "login_type": "manual",
+  "steps": [
+    { "type": "goto", "url": "https://www.hifini.com/" },
+    { "type": "condition", "check": { "selector_text": "签到" }, "then": [{ "type": "retry", "max_attempts": 3, "interval_ms": 1500, "steps": [{ "type": "click", "selector": "a[href*=sign]" }] }], "else": [{ "type": "log", "message": "今日已签到或入口不可见" }] }
+  ],
+  "success_rules": [{ "type": "body_regex", "value": "签到成功|已签到|连续签到" }],
+  "cookie_domains": ["www.hifini.com", ".hifini.com"]
+}

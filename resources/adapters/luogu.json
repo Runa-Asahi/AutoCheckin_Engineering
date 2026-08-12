@@ -1,0 +1,27 @@
+{
+  "site_id": "luogu",
+  "site_name": "洛谷",
+  "site_url": "https://www.luogu.com.cn/",
+  "engine_type": "hybrid",
+  "login_type": "local_browser",
+  "request": {
+    "method": "GET",
+    "url": "https://www.luogu.com.cn/index/ajax_punch",
+    "headers": {
+      "Accept": "application/json, text/plain, */*",
+      "Referer": "https://www.luogu.com.cn/",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132 Safari/537.36"
+    },
+    "timeout_ms": 30000
+  },
+  "steps": [
+    { "type": "goto", "url": "https://www.luogu.com.cn/" },
+    { "type": "request", "method": "GET", "url": "https://www.luogu.com.cn/index/ajax_punch", "headers": { "Accept": "application/json, text/plain, */*", "Referer": "https://www.luogu.com.cn/" } }
+  ],
+  "success_rules": [
+    { "type": "json_path", "value": { "path": "code", "equals": 200 } },
+    { "type": "json_path", "value": { "path": "code", "equals": 201 } }
+  ],
+  "success_logic": "or",
+  "cookie_domains": ["luogu.com.cn", ".luogu.com.cn"]
+}

@@ -1,0 +1,16 @@
+{
+  "site_id": "baidu_tieba",
+  "site_name": "百度贴吧",
+  "site_url": "https://tieba.baidu.com/",
+  "engine_type": "browser",
+  "login_type": "local_browser",
+  "steps": [
+    { "type": "goto", "url": "https://tieba.baidu.com/" },
+    { "type": "tieba_batch_sign" }
+  ],
+  "success_rules": [
+    { "type": "json_path", "value": { "path": "code", "equals": 0 } }
+  ],
+  "success_logic": "or",
+  "cookie_domains": ["tieba.baidu.com", ".baidu.com"]
+}
