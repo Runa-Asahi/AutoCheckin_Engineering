@@ -2,7 +2,7 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
-## [1.0.1] - 2026-08-13
+## [1.0.1] - 2026-10-13
 
 ### Fixed
 

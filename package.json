@@ -3,7 +3,10 @@
   "version": "1.0.1",
   "private": true,
   "description": "Local-first automatic check-in manager",
-  "author": "AutoCheckin Contributors",
+  "author": {
+    "name": "AutoCheckin Contributors",
+    "email": "256862649@qq.com"
+  },
   "license": "UNLICENSED",
   "packageManager": "pnpm@10.15.0",
   "engines": {
@@ -22,7 +25,7 @@
     "test:e2e": "playwright test",
     "lint": "eslint . --ext .ts,.vue",
     "package": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder",
+    "dist": "npm run build && electron-builder --publish never",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
@@ -67,6 +70,10 @@
     "extraResources": [{ "from": "resources/adapters", "to": "adapters" }],
     "win": { "target": "nsis" },
     "mac": { "target": "dmg" },
-    "linux": { "target": ["AppImage", "deb"] }
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "maintainer": "AutoCheckin Contributors <256862649@qq.com>",
+      "category": "Utility"
+    }
   }
 }
