@@ -1,57 +1,73 @@
 # AutoCheckin
 
-AutoCheckin 是一款本地优先的自动签到桌面应用。它在用户设备上保存任务、凭据和执行记录，支持 HTTP/API、浏览器自动化以及混合执行模式。
+闹钟还没响的时候，今天要签的到可以已经签完了。
 
-> 当前正式版本：**V1.0.1**
+AutoCheckin 是一款本地优先的自动签到桌面应用。任务、凭据和每一次执行记录都放在你自己的电脑上。到了你设定的时间，它用 HTTP/API、浏览器，或两种方式接续完成签到，再把结果留在本机。
 
-## 功能
+> 当前正式版本：**V1.0.1** · [下载安装包](https://github.com/Runa-Asahi/AutoCheckin_Engineering/releases/tag/v1.0.1)
 
-- 管理签到任务、Cron 计划、执行记录和 30 天统计
-- 支持 HTTP/API、Playwright 浏览器和失败回退的混合引擎
-- 内置百度贴吧、HiFiNi、HostLoc、洛谷和 V2EX 适配器
-- 支持 Cookie、独立浏览器档案及本地 Chrome/Edge Profile
-- 使用 OpenAI、Anthropic、Gemini、DeepSeek、GLM 或兼容接口生成适配器
-- 导入、导出 AES-256-GCM 加密的 `.acbackup` 备份
-- 提供系统通知、日志脱敏和任务失败诊断
+![签到任务页：五个站点的计划、最近一次结果和连续签到天数](docs/images/preview.png)
 
-## 安全设计
+*任务页把网站、引擎、状态、上次执行和连续天数放在同一张表里。*
 
-- 首次启动需设置至少 8 位主密码
-- 优先使用系统钥匙串；不可用时以 PBKDF2-SHA512 派生密钥
-- 凭据与 Cookie 使用 AES-256-GCM 字段级加密
-- Renderer 禁用 Node.js，通过 `contextBridge` 暴露最小 API
-- IPC 输入使用 Zod 校验，日志会移除密码、Cookie、Token 和 API Key
-- 页面分析拒绝本机、局域网、链路本地地址及非 HTTP(S) URL
-- 不提供验证码、风控、反爬机制或账户安全措施的绕过能力
+## 它每天做什么
 
-## 系统要求
+打开应用，先看到的是一张任务表。每个网站一行：什么时候跑、上次是否成功、连续签到了多少天。成功、失败、正在执行、还在等待，用颜色分开。点进去能看执行记录；统计页汇总最近 30 天。
 
-### 使用发布版
+跑任务有三种方式，按站点来选：
 
-- Windows 10/11、macOS 或主流 Linux 发行版
-- 浏览器任务首次运行时需要网络连接，以下载匹配版本的 Chromium
-- 复用本地浏览器档案时需要已安装 Chrome 或 Edge
+- **HTTP / API**：站点有稳定接口时，直接发请求。
+- **浏览器**：Playwright 打开隔离窗口，沿用已经登录过的档案。
+- **混合**：接口走不通时回退到浏览器，把这一次签到做完。
 
-### 从源码开发
+做完后，系统通知会告诉你结果。日志里的密码、Cookie、Token 和 API Key 会被拿掉。任务失败时，诊断会指出可能卡在哪一步。
 
-- Node.js 20 或更高版本（CI 使用 Node.js 22）
-- pnpm 10
-- 原生依赖编译所需的系统构建工具（仅在没有预编译包时需要）
+换电脑时，把数据导出成 AES-256-GCM 加密的 `.acbackup`，到新设备上再导入。
 
-## 快速开始
+## 现在能签的站点
 
-从 GitHub Releases 下载对应平台的安装包。首次启动后设置主密码，然后添加任务并选择内置适配器或 AI 引导。
+内置适配器：
 
-浏览器任务建议使用 AutoCheckin 专用档案。首次执行时在隔离窗口完成登录和一次手动签到，关闭窗口后，后续任务会复用已保存的登录状态。
+| 站点 | 引擎 |
+| --- | --- |
+| 百度贴吧 | 浏览器 |
+| HiFiNi 音乐磁场 | 浏览器 |
+| HostLoc | 浏览器 |
+| 洛谷 | 混合 |
+| V2EX | 混合 |
 
-## 本地开发
+登录可以用 Cookie、AutoCheckin 专用浏览器档案，或本机已经装好的 Chrome / Edge Profile。
+
+没有现成适配器时，打开 AI 向导。它可以使用 OpenAI、Anthropic、Gemini、DeepSeek、GLM，或任何兼容接口，根据页面生成一份适配器。页面分析只接受 HTTP(S) 地址，并拒绝本机、局域网和链路本地地址。
+
+## 数据留在这台电脑
+
+第一次启动要设置至少 8 位主密码。密钥优先放进系统钥匙串；钥匙串不可用时，用 PBKDF2-SHA512 在本地派生。凭据和 Cookie 以 AES-256-GCM 做字段级加密。
+
+界面进程不启用 Node.js，只通过 `contextBridge` 拿到最小的一组接口。跨进程输入用 Zod 校验。
+
+验证码、风控、反爬和账户安全措施不在这个应用的能力范围内。
+
+## 装上就能用
+
+发布版可以跑在 Windows 10/11、macOS 和主流 Linux 上。浏览器任务第一次执行时需要联网，用来下载匹配版本的 Chromium。如果要复用本机浏览器档案，电脑上需要已经安装 Chrome 或 Edge。
+
+1. 从 [GitHub Releases](https://github.com/Runa-Asahi/AutoCheckin_Engineering/releases/tag/v1.0.1) 下载对应平台的安装包。
+2. 第一次打开时设置主密码。
+3. 添加任务，选一个内置适配器，或让 AI 向导帮你写一份。
+
+浏览器任务建议使用 AutoCheckin 专用档案。第一次执行时，在隔离窗口里完成登录，并亲手签到一次。关掉窗口之后，后面的计划任务会继续使用这份登录状态。
+
+## 在本机改代码
+
+需要 Node.js 20 或更高版本（CI 使用 Node.js 22）、pnpm 10。只有在没有预编译包时，才需要系统构建工具来编译原生依赖。
 
 ```powershell
 pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-运行完整的静态检查、测试与构建：
+提交前跑一遍检查、测试和构建：
 
 ```powershell
 pnpm run typecheck
@@ -60,15 +76,15 @@ pnpm run build
 pnpm test:e2e
 ```
 
-生成当前平台安装包：
+打出当前平台的安装包：
 
 ```powershell
 pnpm run dist
 ```
 
-构建结果位于 `dist/`，该目录不纳入版本控制。
+安装包出现在 `dist/`。这个目录不进入版本库。
 
-## 项目结构
+## 仓库地图
 
 ```text
 AutoCheckin/
@@ -86,18 +102,18 @@ AutoCheckin/
 
 ## 技术栈
 
-Electron、Vue 3、TypeScript、Element Plus、Pinia、Drizzle ORM、SQLite、Playwright、Vitest 和 electron-builder。
+Electron、Vue 3、TypeScript、Element Plus、Pinia、Drizzle ORM、SQLite、Playwright、Vitest、electron-builder。
 
-数据库优先加载 `better-sqlite3`。当当前 Electron ABI 没有可用原生模块时，应用使用 Electron 内置的 `node:sqlite` 兼容后端；两种后端采用相同的 Schema、迁移、WAL、外键和字段级加密策略。
+数据库优先加载 `better-sqlite3`。当前 Electron ABI 没有可用的原生模块时，应用改用 Electron 内置的 `node:sqlite`。两种后端使用同一套 Schema、迁移、WAL、外键和字段级加密。
 
-## 发布
+## 发布一个版本
 
-推送 `v*` 标签会触发 GitHub Actions，在 Windows、macOS 和 Linux 上构建安装包并创建 GitHub Release。版本发布约定见 [CHANGELOG.md](CHANGELOG.md)。
+推送 `v*` 标签后，GitHub Actions 会在 Windows、macOS 和 Linux 上构建安装包，并创建 GitHub Release。版本记录写在 [CHANGELOG.md](CHANGELOG.md)。
 
-## 合规提示
+## 使用之前
 
-自动化访问可能违反目标网站的用户协议。请仅为自己有权使用的账户配置签到任务，并自行评估使用风险。
+自动访问可能违反目标网站的用户协议。请只为自己有权使用的账户配置签到，并自己判断这样做的风险。
 
 ## 参与贡献
 
-提交代码前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。安全问题请勿在公开 Issue 中披露，请通过仓库维护者提供的私密渠道报告。
+改代码之前先看 [CONTRIBUTING.md](CONTRIBUTING.md)。安全问题请不要写进公开 Issue，通过仓库维护者提供的私密渠道报告。
