@@ -41,13 +41,45 @@ export class AdapterRegistry {
     for (const filename of files) {
       if (!filename.endsWith('.json')) continue
       const parsed = AdapterSchema.parse(JSON.parse(await readFile(join(root, filename), 'utf8')))
-      this.adapters.set(parsed.site_id, upgradeKnownAdapter(parsed))
+      this.adapters.set(parsed.site_id, upgradeAdapterForRuntime(parsed))
     }
   }
 }
 
 /** Luogu's visible menu changed, but its check-in endpoint remains stable. */
-function upgradeKnownAdapter(adapter: Adapter): Adapter {
+export function upgradeAdapterForRuntime(adapter: Adapter): Adapter {
+  if (adapter.site_id === 'openasi' || new URL(adapter.site_url).hostname === 'app.openasi.bitmiracle.cn') return AdapterSchema.parse({
+    ...adapter,
+    site_id: 'openasi',
+    site_name: 'OpenASI',
+    site_url: 'https://app.openasi.bitmiracle.cn/dashboard',
+    engine_type: 'browser',
+    login_type: 'local_browser',
+    steps: [
+      { type: 'goto', url: 'https://app.openasi.bitmiracle.cn/dashboard' },
+      { type: 'wait_for', selector: 'body', state: 'visible', timeout_ms: 30_000 },
+      { type: 'wait_for', selector: 'button:has-text("签到")', state: 'visible', timeout_ms: 30_000 },
+      {
+        type: 'condition',
+        check: { selector_text: '已签到' },
+        then: [{ type: 'log', message: '今日已经签到，无需重复操作。' }],
+        else: [
+          {
+            type: 'retry',
+            max_attempts: 3,
+            interval_ms: 1_000,
+            steps: [
+              { type: 'click', selector: 'button:has-text("签到"):not(:has-text("已签到")), [role="button"]:has-text("签到"):not(:has-text("已签到"))', timeout_ms: 3_000, allow_missing: true },
+            ],
+          },
+          { type: 'wait_for_text', value: '签到成功|签到完成|已签到|今日已签', timeout_ms: 15_000 },
+        ],
+      },
+    ],
+    success_rules: [{ type: 'body_regex', value: '签到成功|签到完成|已签到|今日已签' }],
+    success_logic: 'or',
+    cookie_domains: ['app.openasi.bitmiracle.cn'],
+  })
   if (adapter.site_id === 'baidu_tieba') return AdapterSchema.parse({
     ...adapter,
     site_name: '百度贴吧',

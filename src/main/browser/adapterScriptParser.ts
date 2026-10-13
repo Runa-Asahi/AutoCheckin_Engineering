@@ -1,7 +1,7 @@
 import { renderTemplate } from '../engine/variableTemplate.js'
 
 export type CompiledStep = Record<string, unknown> & { type: string }
-const simpleTypes = new Set(['goto', 'click', 'fill', 'wait', 'wait_for', 'extract', 'log', 'screenshot'])
+const simpleTypes = new Set(['goto', 'click', 'fill', 'wait', 'wait_for', 'wait_for_text', 'extract', 'log', 'screenshot'])
 
 export function compileAdapterSteps(rawSteps: Array<Record<string, unknown>>, variables: Record<string, string>): CompiledStep[] {
   return rawSteps.map((raw, index) => compileStep(renderTemplate(raw, variables) as Record<string, unknown>, `steps[${index}]`))

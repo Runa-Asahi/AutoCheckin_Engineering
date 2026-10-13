@@ -11,4 +11,12 @@ describe('AdapterScriptParser', () => {
     expect(() => compileAdapterSteps([{ type: 'eval_script' }], {})).toThrow(/不支持/)
     expect(() => compileAdapterSteps([{ type: 'retry', max_attempts: 99, steps: [] }], {})).toThrow(/1-10/)
   })
+  it('keeps precise visible button selectors intact', () => {
+    const selector = 'button:has-text("签到"):not(:has-text("已签到"))'
+    expect(compileAdapterSteps([{ type: 'click', selector }], {})[0].selector).toBe(selector)
+  })
+  it('supports waiting for asynchronously rendered result text', () => {
+    const step = compileAdapterSteps([{ type: 'wait_for_text', value: '签到成功|已签到', timeout_ms: 15_000 }], {})[0]
+    expect(step).toMatchObject({ type: 'wait_for_text', value: '签到成功|已签到' })
+  })
 })

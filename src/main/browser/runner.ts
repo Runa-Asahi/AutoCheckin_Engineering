@@ -31,9 +31,13 @@ function template<T>(value: T, vars: Record<string, string>): T {
 }
 
 async function randomMouse(page: Page, selector: string): Promise<void> {
-  const box = await page.locator(selector).first().boundingBox()
+  const box = await firstVisibleLocator(page, selector).boundingBox()
   if (!box) return
   await page.mouse.move(box.x + Math.random() * box.width, box.y + Math.random() * box.height, { steps: 5 + Math.floor(Math.random() * 8) })
+}
+
+function firstVisibleLocator(page: Page, selector: string): ReturnType<Page['locator']> {
+  return page.locator(selector).filter({ visible: true }).first()
 }
 
 async function checkCondition(page: Page, check: Record<string, unknown>, vars: Record<string, string>): Promise<boolean> {
@@ -53,10 +57,19 @@ async function executeSteps(page: Page, context: BrowserContext, steps: Step[], 
   for (const raw of steps) {
     const step = template(raw, vars), type = String(step.type ?? '')
     if (type === 'goto') await page.goto(String(step.url), { waitUntil: 'domcontentloaded', timeout: Number(step.timeout_ms ?? 30_000) })
-    else if (type === 'click') { const selector = String(step.selector); await randomMouse(page, selector); await page.locator(selector).first().click({ timeout: Number(step.timeout_ms ?? 15_000) }) }
+    else if (type === 'click') {
+      const selector = String(step.selector), locator = firstVisibleLocator(page, selector)
+      try { await locator.waitFor({ state: 'visible', timeout: Number(step.timeout_ms ?? 15_000) }) }
+      catch (error) { if (step.allow_missing === true) { logs.push(`跳过已不存在的控件：${selector}`); continue }; throw error }
+      await randomMouse(page, selector)
+      await locator.click({ timeout: Number(step.timeout_ms ?? 15_000) })
+    }
     else if (type === 'fill') await page.locator(String(step.selector)).fill(String(step.value ?? ''))
     else if (type === 'wait') await page.waitForTimeout(Number(step.ms ?? step.milliseconds ?? 1000))
     else if (type === 'wait_for') await page.locator(String(step.selector)).waitFor({ state: (step.state as 'attached'|'detached'|'visible'|'hidden') ?? 'visible', timeout: Number(step.timeout_ms ?? step.timeout ?? 15_000) })
+    else if (type === 'wait_for_text') {
+      await page.waitForFunction((source) => new RegExp(source, 'i').test(document.body?.innerText ?? ''), String(step.value ?? step.text ?? ''), { timeout: Number(step.timeout_ms ?? step.timeout ?? 15_000) })
+    }
     else if (type === 'extract') vars[String(step.name)] = await page.locator(String(step.selector)).first().innerText()
     else if (type === 'request') {
       const method = String(step.method ?? 'GET').toUpperCase()

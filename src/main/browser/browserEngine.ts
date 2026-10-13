@@ -23,7 +23,7 @@ export class BrowserEngine implements IBrowserEngine {
   }
 
   async execute(adapter: Adapter, task: Task, cookies: BrowserCookie[], variables: Record<string, string>): Promise<BrowserEngineOutput> {
-    if (task.login_type === 'local_browser') return this.localBrowserManager.executeWithLocalProfile(adapter, task, cookies, variables)
+    if (task.login_type === 'local_browser' || adapter.login_type === 'local_browser') return this.localBrowserManager.executeWithLocalProfile(adapter, task, cookies, variables)
     const executablePath = await this.manager.ensureBrowser()
     this.onProgress({ phase: 'executing', percent: 100, message: `正在执行 ${task.site_name} 浏览器任务` })
     const screenshotDir = join(this.userDataDir, 'screenshots', task.id)
@@ -72,7 +72,7 @@ export class BrowserEngine implements IBrowserEngine {
   }
 
   async promptManualLoginForTask(adapter: Adapter, task: Task): Promise<BrowserCookie[]> {
-    if (task.login_type === 'local_browser') return this.localBrowserManager.promptManualLogin(adapter, task)
+    if (task.login_type === 'local_browser' || adapter.login_type === 'local_browser') return this.localBrowserManager.promptManualLogin(adapter, task)
     return this.promptManualLogin(adapter.site_url, adapter.cookie_domains.length ? adapter.cookie_domains : [new URL(adapter.site_url).hostname])
   }
 }
