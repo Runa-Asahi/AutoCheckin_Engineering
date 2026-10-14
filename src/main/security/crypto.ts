@@ -5,6 +5,13 @@ import { join } from 'node:path'
 interface KeytarLike { getPassword(service: string, account: string): Promise<string | null>; setPassword(service: string, account: string, password: string): Promise<void> }
 interface RememberedSecret { get(): Promise<string | null>; set(password: string): Promise<void> }
 
+/** Constant-time string comparison; hashes first so differing lengths don't leak or throw. */
+export function safeEqual(a: string, b: string): boolean {
+  const left = createHash('sha256').update(a, 'utf8').digest()
+  const right = createHash('sha256').update(b, 'utf8').digest()
+  return timingSafeEqual(left, right) && a.length === b.length
+}
+
 export class MasterPasswordManager {
   constructor(private readonly dataDir: string, private readonly keytarOverride?: KeytarLike | null, private readonly rememberedOverride?: RememberedSecret | null) {}
 
@@ -66,7 +73,7 @@ export class MasterPasswordManager {
 
   async verifyMasterPassword(password: string): Promise<boolean> {
     const stored = await this.getMasterPassword()
-    if (stored !== null) return stored === password
+    if (stored !== null) return safeEqual(stored, password)
     try {
       const payload = await readFile(join(this.dataDir, 'master.verify'))
       const actual = createHash('sha256').update(pbkdf2Sync(password, payload.subarray(0, 32), 100_000, 32, 'sha512')).digest()
