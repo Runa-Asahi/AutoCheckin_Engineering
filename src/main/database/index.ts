@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'
 import { DatabaseSync } from 'node:sqlite'
 import * as schema from './schema.js'
 
-const migrationSql = `
+export const migrationSql = `
 CREATE TABLE IF NOT EXISTS tasks (
  id TEXT PRIMARY KEY, site_id TEXT NOT NULL, site_name TEXT NOT NULL, engine_type TEXT NOT NULL,
  login_type TEXT NOT NULL, schedule TEXT DEFAULT '0 8 * * *', enabled INTEGER DEFAULT 1, priority INTEGER DEFAULT 0,
@@ -37,6 +37,27 @@ CREATE TABLE IF NOT EXISTS __migrations (version INTEGER PRIMARY KEY, applied_at
 INSERT OR IGNORE INTO __migrations(version, applied_at) VALUES (1, datetime('now'));
 `
 
+const migrationV2Sql = `
+CREATE TABLE IF NOT EXISTS schedule_states (
+  task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+  cycle_key TEXT NOT NULL,
+  timezone TEXT NOT NULL,
+  scheduled_at TEXT NOT NULL,
+  window_end TEXT NOT NULL,
+  local_date TEXT,
+  status TEXT NOT NULL,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  last_attempt_at TEXT,
+  next_retry_at TEXT,
+  outcome TEXT,
+  message TEXT,
+  succeeded INTEGER NOT NULL DEFAULT 0,
+  lease_until TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_schedule_retry ON schedule_states(status, next_retry_at);
+`
+
 export class AppDatabase {
   readonly sqlite: SqliteFacade
   readonly schema = schema
@@ -59,6 +80,17 @@ export class AppDatabase {
     this.sqlite.pragma('foreign_keys = ON')
     this.sqlite.pragma('busy_timeout = 5000')
     this.sqlite.exec(migrationSql)
+    this.applyMigrations()
+  }
+
+  private applyMigrations(): void {
+    const current = this.sqlite.prepare('SELECT MAX(version) AS version FROM __migrations').get() as { version: number | null } | undefined
+    const version = current?.version ?? 0
+    if (version >= 2) return
+    this.sqlite.exec(migrationV2Sql)
+    const columns = this.sqlite.prepare('PRAGMA table_info(execution_logs)').all() as Array<{ name: string }>
+    if (!columns.some((column) => column.name === 'cycle_key')) this.sqlite.exec('ALTER TABLE execution_logs ADD COLUMN cycle_key TEXT')
+    this.sqlite.prepare(`INSERT OR IGNORE INTO __migrations(version, applied_at) VALUES (2, datetime('now'))`).run()
   }
 
   close(): void { this.sqlite.close() }

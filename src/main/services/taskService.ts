@@ -3,17 +3,21 @@ import type { AppDatabase } from '../database/index.js'
 import type { CredentialEncryptor } from '../security/crypto.js'
 import type { AdapterRegistry } from '../adapters/adapterRegistry.js'
 import type { CreateTaskInput, TaskListQuery, UpdateTaskInput } from '../../shared/schemas.js'
-import type { ExecutionLog, ExecutionResult, Task } from '../../shared/types.js'
+import type { BrowserProgress, ExecutionLog, ExecutionResult, ScheduleSnapshot, Task } from '../../shared/types.js'
+import { computeConsecutiveDays } from '../../shared/localTime.js'
 import { HttpEngine } from '../engine/httpEngine.js'
 import { sanitizeLog } from '../security/logSanitizer.js'
 import { BrowserEngine, type BrowserCookie } from '../browser/browserEngine.js'
-import type { BrowserProgress } from '../../shared/types.js'
 import { buildVariables } from '../engine/variableTemplate.js'
+import { classifyOutcome } from './outcomeClassifier.js'
+import type { ExecuteOptions } from './taskScheduler.js'
+import type { SuccessEvidence } from './schedulePolicy.js'
 
 export class TaskService {
   private readonly httpEngine = new HttpEngine()
   private readonly browserEngine: BrowserEngine
-  constructor(private db: AppDatabase, private crypto: CredentialEncryptor, private adapters: AdapterRegistry, userDataDir: string, private readonly onBrowserProgress: (progress: BrowserProgress) => void = () => undefined) {
+  private readonly inflight = new Map<string, Promise<ExecutionResult>>()
+  constructor(private db: AppDatabase, private crypto: CredentialEncryptor, private adapters: AdapterRegistry, userDataDir: string, private readonly onBrowserProgress: (progress: BrowserProgress) => void = () => undefined, private readonly getTimezone: () => string = () => 'Asia/Shanghai', private readonly now: () => Date = () => new Date()) {
     this.browserEngine = new BrowserEngine(userDataDir, onBrowserProgress)
   }
 
@@ -26,7 +30,7 @@ export class TaskService {
       for (const [key, value] of Object.entries(input.credentials ?? {})) this.saveCredential(id, 'password', key, value, now)
       for (const cookie of parseCookies(input.cookies ?? '', this.adapters.get(input.adapterId).cookie_domains[0] ?? input.siteId)) this.saveCookie(id, cookie, now)
     })()
-    return this.getTask(id)
+    return this.hydrate(this.getTask(id))
   }
 
   list(query: TaskListQuery): Task[] {
@@ -35,11 +39,11 @@ export class TaskService {
     if (query.search) { where.push(`site_name LIKE ?`); params.push(`%${query.search}%`) }
     const orderColumn = ['last_run_at', 'consecutive_days', 'created_at'].includes(query.sortBy) ? query.sortBy : 'created_at'
     const direction = query.sortOrder === 'asc' ? 'ASC' : 'DESC'
-    return this.db.sqlite.prepare(`SELECT * FROM tasks ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY ${orderColumn} ${direction}`).all(...params) as Task[]
+    return (this.db.sqlite.prepare(`SELECT * FROM tasks ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY ${orderColumn} ${direction}`).all(...params) as Task[]).map((task) => this.hydrate(task))
   }
 
   get(id: string): { task: Task; logs: ExecutionLog[] } {
-    return { task: this.getTask(id), logs: this.db.sqlite.prepare('SELECT * FROM execution_logs WHERE task_id = ? ORDER BY executed_at DESC LIMIT 20').all(id) as ExecutionLog[] }
+    return { task: this.hydrate(this.getTask(id)), logs: this.db.sqlite.prepare('SELECT * FROM execution_logs WHERE task_id = ? ORDER BY executed_at DESC LIMIT 20').all(id) as ExecutionLog[] }
   }
 
   update(id: string, input: UpdateTaskInput): Task {
@@ -50,46 +54,90 @@ export class TaskService {
       const values = entries.map(([key, value]) => key === 'enabled' ? (value ? 1 : 0) : key === 'config' ? JSON.stringify(value) : value)
       this.db.sqlite.prepare(`UPDATE tasks SET ${sets.join(', ')}, updated_at = ? WHERE id = ?`).run(...values, new Date().toISOString(), id)
     }
-    return this.getTask(id)
+    return this.hydrate(this.getTask(id))
   }
 
   delete(id: string): void { this.getTask(id); this.db.sqlite.prepare('DELETE FROM tasks WHERE id = ?').run(id) }
   cleanupLogs(retentionDays: number): void { this.db.sqlite.prepare('DELETE FROM execution_logs WHERE executed_at < ?').run(new Date(Date.now() - Math.max(7, retentionDays) * 86_400_000).toISOString()) }
 
-  async execute(id: string): Promise<ExecutionResult> {
+  async execute(id: string, options: ExecuteOptions = {}): Promise<ExecutionResult> {
+    const existing = this.inflight.get(id)
+    if (existing) {
+      if (options.skipIfBusy) return { success: false, status: 'pending', message: '任务正在执行，已跳过重复触发', durationMs: 0, engineUsed: 'scheduler', outcome: 'skipped' }
+      return existing
+    }
+    const run = this.executeExclusive(id, options).finally(() => { if (this.inflight.get(id) === run) this.inflight.delete(id) })
+    this.inflight.set(id, run)
+    return run
+  }
+
+  recentSuccesses(id: string, sinceIso: string): SuccessEvidence[] {
+    return this.db.sqlite.prepare(`SELECT executed_at, cycle_key FROM execution_logs WHERE task_id=? AND status='success' AND executed_at>=? ORDER BY executed_at DESC`).all(id, sinceIso) as SuccessEvidence[]
+  }
+
+  markFinalFailure(id: string): void {
+    const now = this.now().toISOString()
+    this.db.sqlite.prepare(`UPDATE tasks SET last_status='failed', consecutive_days=0, updated_at=? WHERE id=?`).run(now, id)
+  }
+
+  markPending(id: string): void {
+    this.db.sqlite.prepare(`UPDATE tasks SET last_status='pending', updated_at=? WHERE id=?`).run(this.now().toISOString(), id)
+  }
+
+  recordSkip(id: string, reason: string, cycleKey: string | null): void {
+    const now = this.now().toISOString()
+    this.db.sqlite.prepare(`INSERT INTO execution_logs (id,task_id,run_id,status,engine_used,duration_ms,error_message,retry_count,executed_at,cycle_key) VALUES (?,?,?,?,?,?,?,?,?,?)`).run(randomUUID(), id, randomUUID(), 'pending', 'scheduler', 0, reason, 0, now, cycleKey)
+  }
+
+  private async executeExclusive(id: string, options: ExecuteOptions): Promise<ExecutionResult> {
     const task = this.getTask(id), adapter = this.adapters.get(task.adapter_id), runId = randomUUID(), started = Date.now()
     this.db.sqlite.prepare(`UPDATE tasks SET last_status='running' WHERE id=?`).run(id)
     let retryCount = 0
     try {
       const variables = buildVariables(this.loadCredentials(id))
       const config = JSON.parse(task.config_json || '{}') as { maxRetries?: number }
-      const maxRetries = Math.max(0, Math.min(3, Number(config.maxRetries ?? 1)))
+      const maxRetries = Math.max(0, Math.min(3, Number(config.maxRetries ?? 0)))
       let output: { success: boolean; message: string; requestSummary?: string; responseSummary: string; screenshotPath?: string | null; engineUsed: string; cookies?: BrowserCookie[] } | undefined
       let lastError: unknown
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         retryCount = attempt
-        try { output = await this.executeWithEngine(task, adapter, variables); lastError = undefined; if (output.success || attempt === maxRetries) break }
-        catch (error) { lastError = error; if (attempt === maxRetries) throw error }
+        try {
+          output = await this.executeWithEngine(task, adapter, variables)
+          lastError = undefined
+          const outcome = classifyOutcome({ success: output.success, message: output.message, responseSummary: output.responseSummary, failureRules: adapter.failure_rules })
+          if (outcome === 'success' || outcome === 'authentication_required' || outcome === 'manual_action_required' || outcome === 'permanent_failure' || attempt === maxRetries) break
+        } catch (error) {
+          lastError = error
+          const message = error instanceof Error ? error.message : String(error)
+          const outcome = classifyOutcome({ success: false, message })
+          if (outcome === 'authentication_required' || outcome === 'manual_action_required' || outcome === 'permanent_failure' || attempt === maxRetries) throw error
+        }
         await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)))
       }
       if (!output) throw lastError ?? new Error('执行引擎没有返回结果')
       if (output.cookies?.length) this.replaceCookies(id, output.cookies)
-      const status = output.success ? 'success' : 'failed', durationMs = Date.now() - started, now = new Date().toISOString()
-      const nextDays = this.nextConsecutiveDays(task, status, now)
+      const outcome = classifyOutcome({ success: output.success, message: output.message, responseSummary: output.responseSummary, failureRules: adapter.failure_rules })
+      const success = outcome === 'success'
+      const status = success ? 'success' : 'failed'
+      const durationMs = Date.now() - started
+      const now = this.now().toISOString()
+      const taskStatus = success ? 'success' : 'pending'
+      const nextDays = success ? this.nextConsecutiveDays(task, now) : task.consecutive_days
       this.db.sqlite.transaction(() => {
-        this.db.sqlite.prepare(`INSERT INTO execution_logs (id,task_id,run_id,status,engine_used,duration_ms,request_summary,response_summary,error_message,screenshot_path,retry_count,executed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(randomUUID(), id, runId, status, output.engineUsed, durationMs, output.requestSummary ?? null, output.responseSummary, output.success ? null : output.message, output.screenshotPath ?? null, retryCount, now)
-        this.db.sqlite.prepare(`UPDATE tasks SET last_run_at=?, last_status=?, consecutive_days=?, updated_at=? WHERE id=?`).run(now, status, nextDays, now, id)
+        this.db.sqlite.prepare(`INSERT INTO execution_logs (id,task_id,run_id,status,engine_used,duration_ms,request_summary,response_summary,error_message,screenshot_path,retry_count,executed_at,cycle_key) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(randomUUID(), id, runId, status, output.engineUsed, durationMs, output.requestSummary ?? null, output.responseSummary, success ? null : output.message, output.screenshotPath ?? null, retryCount, now, options.cycleKey ?? null)
+        this.db.sqlite.prepare(`UPDATE tasks SET last_run_at=?, last_status=?, consecutive_days=?, updated_at=? WHERE id=?`).run(now, taskStatus, nextDays, now, id)
       })()
-      this.onBrowserProgress({ phase: 'completed', percent: 100, message: output.message })
-      return { success: output.success, status, message: output.message, durationMs, engineUsed: output.engineUsed }
+      this.onBrowserProgress({ phase: success ? 'completed' : 'failed', percent: 100, message: output.message, taskId: id, outcome })
+      return { success, status: taskStatus, message: output.message, durationMs, engineUsed: output.engineUsed, outcome, responseSummary: output.responseSummary }
     } catch (error) {
-      const durationMs = Date.now() - started, now = new Date().toISOString(), message = error instanceof Error ? error.message : String(error)
+      const durationMs = Date.now() - started, now = this.now().toISOString(), message = error instanceof Error ? error.message : String(error)
+      const outcome = classifyOutcome({ success: false, message, failureRules: adapter.failure_rules })
       this.db.sqlite.transaction(() => {
-        this.db.sqlite.prepare(`INSERT INTO execution_logs (id,task_id,run_id,status,engine_used,duration_ms,error_message,retry_count,executed_at) VALUES (?,?,?,?,?,?,?,?,?)`).run(randomUUID(), id, runId, 'failed', task.engine_type, durationMs, sanitizeLog(message), retryCount, now)
-        this.db.sqlite.prepare(`UPDATE tasks SET last_run_at=?, last_status='failed', consecutive_days=0, updated_at=? WHERE id=?`).run(now, now, id)
+        this.db.sqlite.prepare(`INSERT INTO execution_logs (id,task_id,run_id,status,engine_used,duration_ms,error_message,retry_count,executed_at,cycle_key) VALUES (?,?,?,?,?,?,?,?,?,?)`).run(randomUUID(), id, runId, 'failed', task.engine_type, durationMs, sanitizeLog(message), retryCount, now, options.cycleKey ?? null)
+        this.db.sqlite.prepare(`UPDATE tasks SET last_run_at=?, last_status='pending', updated_at=? WHERE id=?`).run(now, now, id)
       })()
-      this.onBrowserProgress({ phase: 'failed', percent: 100, message })
-      return { success: false, status: 'failed', message, durationMs, engineUsed: task.engine_type }
+      this.onBrowserProgress({ phase: 'failed', percent: 100, message, taskId: id, outcome })
+      return { success: false, status: 'pending', message, durationMs, engineUsed: task.engine_type, outcome }
     }
   }
 
@@ -160,14 +208,20 @@ export class TaskService {
       for (const cookie of cookies) this.saveCookie(taskId, { name: cookie.name, value: cookie.value, domain: cookie.domain, path: cookie.path, expiresAt: cookie.expires && cookie.expires > 0 ? new Date(cookie.expires * 1000).toISOString() : null, secure: Boolean(cookie.secure), httpOnly: Boolean(cookie.httpOnly) }, now)
     })()
   }
-  private nextConsecutiveDays(task: Task, status: string, now: string): number {
-    if (status !== 'success') return 0
+  private nextConsecutiveDays(task: Task, now: string): number {
     const previous = this.db.sqlite.prepare(`SELECT executed_at FROM execution_logs WHERE task_id=? AND status='success' ORDER BY executed_at DESC LIMIT 1`).get(task.id) as { executed_at: string } | undefined
-    if (!previous) return 1
-    const currentDate = now.slice(0, 10), previousDate = previous.executed_at.slice(0, 10)
-    if (currentDate === previousDate) return task.consecutive_days
-    const delta = Math.round((new Date(`${currentDate}T00:00:00Z`).getTime() - new Date(`${previousDate}T00:00:00Z`).getTime()) / 86_400_000)
-    return delta === 1 ? task.consecutive_days + 1 : 1
+    return computeConsecutiveDays(previous?.executed_at ?? null, new Date(now), this.safeTimezone(), task.consecutive_days)
+  }
+
+  private hydrate(task: Task): Task {
+    const row = this.db.sqlite.prepare('SELECT * FROM schedule_states WHERE task_id=?').get(task.id) as { status: ScheduleSnapshot['status']; message: string | null; next_retry_at: string | null; scheduled_at: string | null; attempt_count: number; outcome: string | null; succeeded: number; local_date: string | null; timezone: string | null } | undefined
+    if (!row) return task
+    return { ...task, schedule_state: { status: row.status, message: row.message, next_retry_at: row.next_retry_at, scheduled_at: row.scheduled_at, attempt_count: Number(row.attempt_count) || 0, outcome: row.outcome, succeeded: Number(row.succeeded) === 1, local_date: row.local_date, timezone: row.timezone } }
+  }
+
+  private safeTimezone(): string {
+    const value = this.getTimezone()
+    try { Intl.DateTimeFormat('en-US', { timeZone: value }).format(new Date()); return value } catch { return 'Asia/Shanghai' }
   }
 }
 

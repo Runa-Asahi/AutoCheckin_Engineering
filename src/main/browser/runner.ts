@@ -1,6 +1,7 @@
 import { chromium, type BrowserContext, type Page } from 'playwright'
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { explainBrowserFailure, pageLooksLikeLogin } from '../../shared/browserFailure.js'
 import { signAllTiebaForums } from './tiebaBatchSign.js'
 
 interface RunnerInput {
@@ -47,6 +48,7 @@ async function checkCondition(page: Page, check: Record<string, unknown>, vars: 
     if (check.text !== undefined) return (await locator.first().innerText().catch(() => '')).includes(String(template(check.text, vars)))
     return await locator.count() > 0
   }
+  if (check.login_page === true) return pageLooksLikeLogin(page.url(), await page.locator('body').innerText().catch(() => ''))
   if (check.selector_text) return (await page.locator('body').innerText()).includes(String(template(check.selector_text, vars)))
   if (check.var) return String(vars[String(check.var)] ?? '') === String(template(check.equals ?? '', vars))
   return false
@@ -89,7 +91,7 @@ async function executeSteps(page: Page, context: BrowserContext, steps: Step[], 
         : `贴吧批量签到未完全完成：已处理 ${result.signed + result.already + result.skipped}/${result.total}，失败 ${result.failed}。${result.failures[0]?.reason ?? ''}`
       logs.push(vars.__result_message)
     }
-    else if (type === 'log') logs.push(String(step.message ?? ''))
+    else if (type === 'log') { const message = String(step.message ?? ''); logs.push(message); if (step.result === true) vars.__result_message = message }
     else if (type === 'screenshot') { await mkdir(screenshotDir, { recursive: true }); await page.screenshot({ path: join(screenshotDir, `${String(step.name ?? 'step')}-${Date.now()}.png`), fullPage: true }) }
     else if (type === 'condition') {
       const ok = await checkCondition(page, (step.check ?? step.if ?? {}) as Record<string, unknown>, vars)
@@ -136,7 +138,10 @@ async function main(): Promise<void> {
     process.stdout.write(JSON.stringify({ success, message, responseSummary: JSON.stringify({ url: page.url(), title: await page.title(), status: effectiveStatus, ruleResults, bodyPreview: body.slice(0, 500), logs, durationMs: Date.now() - started }), screenshotPath, cookies }))
   } catch (error) {
     await mkdir(input.screenshotDir, { recursive: true }); screenshotPath = join(input.screenshotDir, `error-${Date.now()}.png`); if (page) await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => undefined)
-    process.stdout.write(JSON.stringify({ success: false, message: error instanceof Error ? error.message : String(error), responseSummary: '{}', screenshotPath, cookies: [] }))
+    const url = page ? page.url() : ''
+    const body = page ? await page.locator('body').innerText().catch(() => '') : ''
+    const message = explainBrowserFailure(error instanceof Error ? error.message : String(error), url, body)
+    process.stdout.write(JSON.stringify({ success: false, message, responseSummary: JSON.stringify({ url, bodyPreview: body.slice(0, 500) }), screenshotPath, cookies: [] }))
   } finally { if (persistentContext) await persistentContext.close(); else await browser?.close() }
 }
 

@@ -19,8 +19,17 @@ export const executionLogs = sqliteTable('execution_logs', {
   id: text('id').primaryKey(), taskId: text('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
   runId: text('run_id').notNull(), status: text('status').notNull(), engineUsed: text('engine_used').notNull(), durationMs: integer('duration_ms').notNull(),
   requestSummary: text('request_summary'), responseSummary: text('response_summary'), errorMessage: text('error_message'),
-  screenshotPath: text('screenshot_path'), retryCount: integer('retry_count').default(0), executedAt: text('executed_at').notNull(),
+  screenshotPath: text('screenshot_path'), retryCount: integer('retry_count').default(0), executedAt: text('executed_at').notNull(), cycleKey: text('cycle_key'),
 }, (table) => [index('idx_logs_task_time').on(table.taskId, table.executedAt), index('idx_logs_run_id').on(table.runId)])
+
+export const scheduleStates = sqliteTable('schedule_states', {
+  taskId: text('task_id').primaryKey().references(() => tasks.id, { onDelete: 'cascade' }),
+  cycleKey: text('cycle_key').notNull(), timezone: text('timezone').notNull(), scheduledAt: text('scheduled_at').notNull(),
+  windowEnd: text('window_end').notNull(), localDate: text('local_date'), status: text('status').notNull(),
+  attemptCount: integer('attempt_count').notNull().default(0), lastAttemptAt: text('last_attempt_at'), nextRetryAt: text('next_retry_at'),
+  outcome: text('outcome'), message: text('message'), succeeded: integer('succeeded').notNull().default(0),
+  leaseUntil: text('lease_until'), updatedAt: text('updated_at').notNull(),
+}, (table) => [index('idx_schedule_retry').on(table.status, table.nextRetryAt)])
 
 export const siteCookies = sqliteTable('site_cookies', {
   id: text('id').primaryKey(), taskId: text('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),

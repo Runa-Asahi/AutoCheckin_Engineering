@@ -82,6 +82,11 @@ export const AdapterSchema = z.object({
     value: z.unknown(),
   })).min(1),
   success_logic: z.enum(['and', 'or']).default('or'),
+  failure_rules: z.array(z.object({
+    type: z.enum(['body_includes', 'body_regex']),
+    value: z.string().min(1).max(200),
+    outcome: z.enum(['not_ready', 'retryable_error', 'authentication_required', 'manual_action_required', 'permanent_failure']),
+  })).max(20).optional(),
   cookie_domains: z.array(z.string()).default([]),
 })
 

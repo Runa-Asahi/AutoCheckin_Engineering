@@ -2,7 +2,7 @@ import { createCipheriv, createDecipheriv, pbkdf2Sync, randomBytes } from 'node:
 import { readFile, writeFile } from 'node:fs/promises'
 import type { AppDatabase } from '../database/index.js'
 
-const tables = ['tasks', 'credentials', 'execution_logs', 'site_cookies', 'settings'] as const
+const tables = ['tasks', 'credentials', 'execution_logs', 'site_cookies', 'settings', 'schedule_states'] as const
 interface BackupEnvelope { version: 1; salt: string; iv: string; ciphertext: string }
 
 export class BackupService {

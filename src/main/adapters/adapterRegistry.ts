@@ -58,21 +58,22 @@ export function upgradeAdapterForRuntime(adapter: Adapter): Adapter {
     steps: [
       { type: 'goto', url: 'https://app.openasi.bitmiracle.cn/dashboard' },
       { type: 'wait_for', selector: 'body', state: 'visible', timeout_ms: 30_000 },
-      { type: 'wait_for', selector: 'button:has-text("签到")', state: 'visible', timeout_ms: 30_000 },
+      { type: 'wait_for_text', value: '仪表盘|签到|登录|密码|邮箱', timeout_ms: 20_000 },
       {
         type: 'condition',
-        check: { selector_text: '已签到' },
-        then: [{ type: 'log', message: '今日已经签到，无需重复操作。' }],
+        check: { login_page: true },
+        then: [{ type: 'log', result: true, message: '登录状态已失效或当前页面仍要求登录，请重新点击“引导登录并完成首次签到”。' }],
         else: [
           {
-            type: 'retry',
-            max_attempts: 3,
-            interval_ms: 1_000,
-            steps: [
-              { type: 'click', selector: 'button:has-text("签到"):not(:has-text("已签到")), [role="button"]:has-text("签到"):not(:has-text("已签到"))', timeout_ms: 3_000, allow_missing: true },
+            type: 'condition',
+            check: { selector_text: '已签到' },
+            then: [{ type: 'log', message: '今日已经签到，无需重复操作。' }],
+            else: [
+              { type: 'click', selector: 'button.h-8:text-is("签到"), button:has-text("签到"):not(:has-text("已签到"))', timeout_ms: 8_000 },
+              { type: 'click', selector: 'button.w-full:text-is("签到")', timeout_ms: 8_000 },
+              { type: 'wait_for_text', value: '签到成功|今日已签到|已签到', timeout_ms: 15_000 },
             ],
           },
-          { type: 'wait_for_text', value: '签到成功|签到完成|已签到|今日已签', timeout_ms: 15_000 },
         ],
       },
     ],

@@ -4,7 +4,7 @@
 
 AutoCheckin 是一款本地优先的自动签到桌面应用。任务、凭据和每一次执行记录都放在你自己的电脑上。到了你设定的时间，它用 HTTP/API、浏览器，或两种方式接续完成签到，再把结果留在本机。
 
-> 当前正式版本：**V1.0.1** · [下载安装包](https://github.com/Runa-Asahi/AutoCheckin_Engineering/releases/tag/v1.0.1)
+> 当前正式版本：**V1.1.0** · [下载安装包](https://github.com/Runa-Asahi/AutoCheckin_Engineering/releases/tag/v1.1.0)
 
 ![签到任务页：五个站点的计划、最近一次结果和连续签到天数](docs/images/preview.png)
 
@@ -21,6 +21,8 @@ AutoCheckin 是一款本地优先的自动签到桌面应用。任务、凭据�
 - **混合**：接口走不通时回退到浏览器，把这一次签到做完。
 
 做完后，系统通知会告诉你结果。日志里的密码、Cookie、Token 和 API Key 会被拿掉。任务失败时，诊断会指出可能卡在哪一步。
+
+开机登录后可以让 AutoCheckin 留在系统托盘里继续按计划签到。关掉主窗口不会停掉调度，要从托盘菜单选择退出才会停止。启动、到点和睡眠醒来时，它只补当前这一次还没完成的签到，不会把更早漏掉的天数一并重跑。临时故障会按间隔重试；登录失效或需要人工处理时会通知你，并停在这一周期。
 
 换电脑时，把数据导出成 AES-256-GCM 加密的 `.acbackup`，到新设备上再导入。
 
@@ -42,7 +44,7 @@ AutoCheckin 是一款本地优先的自动签到桌面应用。任务、凭据�
 
 ## 数据留在这台电脑
 
-第一次启动要设置至少 8 位主密码。密钥优先放进系统钥匙串；钥匙串不可用时，用 PBKDF2-SHA512 在本地派生。凭据和 Cookie 以 AES-256-GCM 做字段级加密。
+第一次启动要设置至少 8 位主密码。它会加密保存在当前系统账户中，之后打开应用和开机自启动都不再询问。数据库密钥由 PBKDF2-SHA512 派生，凭据和 Cookie 以 AES-256-GCM 做字段级加密。
 
 界面进程不启用 Node.js，只通过 `contextBridge` 拿到最小的一组接口。跨进程输入用 Zod 校验。
 
@@ -52,9 +54,10 @@ AutoCheckin 是一款本地优先的自动签到桌面应用。任务、凭据�
 
 发布版可以跑在 Windows 10/11、macOS 和主流 Linux 上。浏览器任务第一次执行时需要联网，用来下载匹配版本的 Chromium。如果要复用本机浏览器档案，电脑上需要已经安装 Chrome 或 Edge。
 
-1. 从 [GitHub Releases](https://github.com/Runa-Asahi/AutoCheckin_Engineering/releases/tag/v1.0.1) 下载对应平台的安装包。
-2. 第一次打开时设置主密码。
+1. 从 [v1.1.0 发布页](https://github.com/Runa-Asahi/AutoCheckin_Engineering/releases/tag/v1.1.0) 下载对应平台的安装包。
+2. 第一次打开时设置主密码。之后启动会自动解锁。
 3. 添加任务，选一个内置适配器，或让 AI 向导帮你写一份。
+4. 需要一直自动签到时，在设置里打开开机自动启动。关闭窗口后程序仍在托盘中运行。
 
 浏览器任务建议使用 AutoCheckin 专用档案。第一次执行时，在隔离窗口里完成登录，并亲手签到一次。关掉窗口之后，后面的计划任务会继续使用这份登录状态。
 

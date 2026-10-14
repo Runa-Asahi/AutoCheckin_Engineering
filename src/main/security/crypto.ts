@@ -3,9 +3,14 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 interface KeytarLike { getPassword(service: string, account: string): Promise<string | null>; setPassword(service: string, account: string, password: string): Promise<void> }
+interface RememberedSecret { get(): Promise<string | null>; set(password: string): Promise<void> }
 
 export class MasterPasswordManager {
-  constructor(private readonly dataDir: string, private readonly keytarOverride?: KeytarLike | null) {}
+  constructor(private readonly dataDir: string, private readonly keytarOverride?: KeytarLike | null, private readonly rememberedOverride?: RememberedSecret | null) {}
+
+  private keytarService(): string {
+    return process.env.AUTOCHECKIN_KEYTAR_SERVICE || 'AutoCheckin'
+  }
 
   private async keytar(): Promise<KeytarLike | null> {
     if (this.keytarOverride !== undefined) return this.keytarOverride
@@ -16,10 +21,33 @@ export class MasterPasswordManager {
     } catch { return null }
   }
 
+  private async rememberedSecret(): Promise<RememberedSecret | null> {
+    if (this.rememberedOverride !== undefined) return this.rememberedOverride
+    if (!process.versions.electron) return null
+    try {
+      const { safeStorage } = await import('electron')
+      if (!safeStorage.isEncryptionAvailable()) return null
+      const path = join(this.dataDir, 'master.secret')
+      return {
+        get: async () => {
+          const payload = await readFile(path)
+          const password = safeStorage.decryptString(payload)
+          return password || null
+        },
+        set: async (password: string) => {
+          await mkdir(this.dataDir, { recursive: true })
+          await writeFile(path, safeStorage.encryptString(password), { mode: 0o600 })
+        },
+      }
+    } catch { return null }
+  }
+
   async setMasterPassword(password: string): Promise<void> {
-    const keytar = await this.keytar()
-    if (keytar) { try { await keytar.setPassword('AutoCheckin', 'master', password); return } catch { /* use verifier fallback */ } }
     await mkdir(this.dataDir, { recursive: true })
+    const keytar = await this.keytar()
+    if (keytar) { try { await keytar.setPassword(this.keytarService(), 'master', password) } catch { /* the encrypted file below still remembers it */ } }
+    const remembered = await this.rememberedSecret()
+    if (remembered) { try { await remembered.set(password) } catch { /* verifier still lets the user type the password next time */ } }
     const salt = randomBytes(32)
     const derived = pbkdf2Sync(password, salt, 100_000, 32, 'sha512')
     const hash = createHash('sha256').update(derived).digest()
@@ -27,8 +55,13 @@ export class MasterPasswordManager {
   }
 
   async getMasterPassword(): Promise<string | null> {
+    const remembered = await this.rememberedSecret()
+    try {
+      const stored = await remembered?.get()
+      if (stored) return stored
+    } catch { /* try the system keychain */ }
     const keytar = await this.keytar()
-    try { return await keytar?.getPassword('AutoCheckin', 'master') ?? null } catch { return null }
+    try { return await keytar?.getPassword(this.keytarService(), 'master') ?? null } catch { return null }
   }
 
   async verifyMasterPassword(password: string): Promise<boolean> {

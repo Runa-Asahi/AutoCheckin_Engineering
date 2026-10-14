@@ -3,6 +3,19 @@ import type { AIProvider, AIProviderConfig, CreateTaskInput, TaskListQuery, Upda
 export interface DetectedBrowser { id: string; name: string; channel: 'chrome' | 'msedge'; userDataDir: string; executablePath: string; profiles: string[] }
 
 export type TaskStatus = 'success' | 'failed' | 'pending' | 'running'
+export type CheckinOutcome = 'success' | 'not_ready' | 'retryable_error' | 'authentication_required' | 'manual_action_required' | 'permanent_failure' | 'skipped'
+
+export interface ScheduleSnapshot {
+  status: 'waiting' | 'running' | 'retrying' | 'success' | 'failed' | 'manual'
+  message: string | null
+  next_retry_at: string | null
+  scheduled_at: string | null
+  attempt_count: number
+  outcome: string | null
+  succeeded: boolean
+  local_date: string | null
+  timezone: string | null
+}
 
 export interface Task {
   id: string
@@ -21,6 +34,7 @@ export interface Task {
   last_run_at: string | null
   last_status: TaskStatus | null
   consecutive_days: number
+  schedule_state?: ScheduleSnapshot | null
 }
 
 export interface ExecutionLog {
@@ -36,6 +50,7 @@ export interface ExecutionLog {
   screenshot_path: string | null
   retry_count: number
   executed_at: string
+  cycle_key?: string | null
 }
 
 export interface ExecutionResult {
@@ -44,9 +59,11 @@ export interface ExecutionResult {
   message: string
   durationMs: number
   engineUsed: string
+  outcome?: CheckinOutcome
+  responseSummary?: string
 }
 
-export interface BrowserProgress { phase: 'checking' | 'downloading' | 'ready' | 'executing' | 'completed' | 'failed'; percent: number; message: string }
+export interface BrowserProgress { phase: 'checking' | 'downloading' | 'ready' | 'executing' | 'completed' | 'failed'; percent: number; message: string; taskId?: string; outcome?: CheckinOutcome }
 
 export interface StatisticsOverview {
   totalRuns: number

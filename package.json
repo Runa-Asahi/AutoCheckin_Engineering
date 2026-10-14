@@ -1,6 +1,6 @@
 {
   "name": "autocheckin",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "private": true,
   "description": "Local-first automatic check-in manager",
   "author": {
@@ -32,11 +32,10 @@
     "@element-plus/icons-vue": "^2.3.2",
     "axios": "^1.11.0",
     "drizzle-orm": "^0.44.4",
-    "electron-store": "^10.1.0",
     "element-plus": "^2.10.7",
     "node-cron": "^4.2.1",
-    "playwright": "^1.54.2",
     "pinia": "^3.0.3",
+    "playwright": "^1.54.2",
     "vue": "^3.5.18",
     "vue-router": "^4.5.1",
     "zod": "^4.0.17"
@@ -46,32 +45,66 @@
     "keytar": "^7.9.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.54.2",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.17.1",
-    "@playwright/test": "^1.54.2",
     "@vitejs/plugin-vue": "^6.0.1",
-    "electron": "^37.2.6",
-    "electron-vite": "^4.0.0",
-    "electron-builder": "^26.0.12",
     "drizzle-kit": "^0.31.4",
+    "electron": "^37.2.6",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^4.0.0",
     "eslint": "^9.33.0",
+    "nock": "^14.0.10",
     "typescript": "^5.9.2",
     "vite": "^7.1.1",
-    "nock": "^14.0.10",
     "vitest": "^3.2.4",
     "vue-tsc": "^3.0.5"
   },
   "build": {
     "appId": "com.autocheckin.desktop",
     "productName": "AutoCheckin",
-    "asarUnpack": ["**/*.node", "node_modules/playwright/**", "node_modules/playwright-core/**"],
+    "asarUnpack": [
+      "**/*.node",
+      "node_modules/playwright/**",
+      "node_modules/playwright-core/**"
+    ],
     "npmRebuild": false,
-    "files": ["out/**/*", "resources/**/*", "package.json"],
-    "extraResources": [{ "from": "resources/adapters", "to": "adapters" }],
-    "win": { "target": "nsis" },
-    "mac": { "target": "dmg" },
+    "files": [
+      "out/**/*",
+      "resources/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/adapters",
+        "to": "adapters"
+      },
+      {
+        "from": "resources/tray.png",
+        "to": "tray.png"
+      },
+      {
+        "from": "resources/tray@2x.png",
+        "to": "tray@2x.png"
+      },
+      {
+        "from": "resources/icon.png",
+        "to": "icon.png"
+      }
+    ],
+    "icon": "resources/icon.png",
+    "win": {
+      "target": "nsis",
+      "icon": "resources/icon.png"
+    },
+    "mac": {
+      "target": "dmg"
+    },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "maintainer": "AutoCheckin Contributors <256862649@qq.com>",
       "category": "Utility"
     }

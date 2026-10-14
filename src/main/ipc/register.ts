@@ -11,7 +11,7 @@ import type { AIGuideService } from '../ai/aiGuideService.js'
 import type { CredentialEncryptor } from '../security/crypto.js'
 import { LocalBrowserScanner } from '../browser/localBrowserScanner.js'
 
-export function registerIpc(db: AppDatabase, tasks: TaskService, adapters: AdapterRegistry, scheduler: TaskScheduler, statistics: StatisticsService, notifications: NotificationService, backup: BackupService, ai: AIGuideService, encryptor: CredentialEncryptor): void {
+export function registerIpc(db: AppDatabase, tasks: TaskService, adapters: AdapterRegistry, scheduler: TaskScheduler, statistics: StatisticsService, notifications: NotificationService, backup: BackupService, ai: AIGuideService, encryptor: CredentialEncryptor, hooks?: { onAutoLaunch?: (enabled: boolean) => void }): void {
   ipcMain.handle('task:create', (_event, raw) => { const result = tasks.create(CreateTaskSchema.parse(raw)); scheduler.refresh(); return result })
   ipcMain.handle('task:list', (_event, raw) => tasks.list(TaskListQuerySchema.parse(raw ?? {})))
   ipcMain.handle('task:get', (_event, id) => tasks.get(ExecuteTaskSchema.parse({ id }).id))
@@ -19,8 +19,7 @@ export function registerIpc(db: AppDatabase, tasks: TaskService, adapters: Adapt
   ipcMain.handle('task:delete', (_event, id) => { tasks.delete(ExecuteTaskSchema.parse({ id }).id); scheduler.refresh() })
   ipcMain.handle('task:execute', async (_event, id) => {
     const taskId = ExecuteTaskSchema.parse({ id }).id
-    const result = await tasks.execute(taskId)
-    notifications.add({ taskId, title: `${tasks.get(taskId).task.site_name} 签到`, message: result.message, level: result.success ? 'success' : 'error' })
+    const result = await scheduler.runManual(taskId)
     for (const window of BrowserWindow.getAllWindows()) window.webContents.send('task:status', tasks.get(taskId).task)
     return result
   })
@@ -64,7 +63,7 @@ export function registerIpc(db: AppDatabase, tasks: TaskService, adapters: Adapt
       storedValue = JSON.stringify({ ciphertext: encrypted.ciphertext.toString('base64'), iv: encrypted.iv.toString('base64') })
     }
     db.sqlite.prepare(`INSERT INTO settings(key,value,is_encrypted,category,updated_at) VALUES(?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,is_encrypted=excluded.is_encrypted,category=excluded.category,updated_at=excluded.updated_at`).run(input.key, storedValue, input.isEncrypted ? 1 : 0, input.category, new Date().toISOString())
-    if (input.key === 'auto_launch') app.setLoginItemSettings({ openAtLogin: input.value === 'true', openAsHidden: true })
+    if (input.key === 'auto_launch') hooks?.onAutoLaunch?.(input.value === 'true')
     if (input.key === 'timezone') scheduler.refresh()
   })
   ipcMain.handle('system:platform', () => process.platform)
