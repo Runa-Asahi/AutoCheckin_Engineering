@@ -10,7 +10,7 @@
   "license": "UNLICENSED",
   "packageManager": "pnpm@10.15.0",
   "engines": {
-    "node": ">=20",
+    "node": ">=22.5",
     "pnpm": ">=10"
   },
   "main": "out/main/index.js",
