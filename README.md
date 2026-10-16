@@ -1,5 +1,7 @@
 # AutoCheckin
 
+[![CI](https://github.com/Runa-Asahi/AutoCheckin_Engineering/actions/workflows/ci.yml/badge.svg)](https://github.com/Runa-Asahi/AutoCheckin_Engineering/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/Runa-Asahi/AutoCheckin_Engineering)](https://github.com/Runa-Asahi/AutoCheckin_Engineering/releases) ![Electron](https://img.shields.io/badge/Electron-37-47848F) ![Node](https://img.shields.io/badge/node-%3E%3D22.5-339933)
+
 闹钟还没响的时候，今天要签的到可以已经签完了。
 
 AutoCheckin 是一款本地优先的自动签到桌面应用。任务、凭据和每一次执行记录都放在你自己的电脑上。到了你设定的时间，它用 HTTP/API、浏览器，或两种方式接续完成签到，再把结果留在本机。
@@ -63,7 +65,7 @@ AutoCheckin 是一款本地优先的自动签到桌面应用。任务、凭据�
 
 ## 在本机改代码
 
-需要 Node.js 20 或更高版本（CI 使用 Node.js 22）、pnpm 10。只有在没有预编译包时，才需要系统构建工具来编译原生依赖。
+需要 Node.js 22.5 或更高版本（数据库回退与测试依赖内置 `node:sqlite`，CI 使用 Node.js 22）、pnpm 10。只有在没有预编译包时，才需要系统构建工具来编译原生依赖。
 
 ```powershell
 pnpm install --frozen-lockfile
