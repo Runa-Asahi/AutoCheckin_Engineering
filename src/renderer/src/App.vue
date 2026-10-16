@@ -43,7 +43,7 @@ onBeforeUnmount(()=>{unbindNotification?.();unbindProgress?.()})
         <router-link to="/settings" :class="{ active: route.path === '/settings' }"><el-icon><Setting /></el-icon><span>设置</span></router-link>
       </nav>
       <div class="privacy-card"><div class="privacy-dot"></div><strong>数据仅保存在本地</strong><p>凭据与 Cookie 均经过 AES-256-GCM 加密。</p></div>
-      <div class="version">AutoCheckin · v1.1.0</div>
+      <div class="version">AutoCheckin · v1.1.1</div>
     </aside>
     <main class="main-content"><button class="notification-button" @click="openNotifications"><el-badge :value="unread" :hidden="!unread"><el-icon><Bell/></el-icon></el-badge></button><router-view /></main>
     <el-drawer v-model="drawer" title="通知中心" size="360px"><div class="notification-actions"><span>最近 50 条通知</span><el-button text @click="clearAll">清空</el-button></div><div v-if="notifications.length" class="notification-list"><button v-for="item in notifications" :key="item.id" :class="['notification-item',item.level,{unread:!item.read}]" @click="mark(item)"><i></i><div><strong>{{item.title}}</strong><p>{{item.message}}</p><span>{{new Date(item.createdAt).toLocaleString('zh-CN')}}</span></div></button></div><div v-else class="notification-empty">暂无通知</div></el-drawer>
