@@ -2,6 +2,18 @@
 
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
+## [1.1.1] - 2026-10-16
+
+### Security
+
+- 执行记录中的日志脱敏覆盖 JSON 键值、`Authorization: Bearer/Basic` 认证头和 `access_token=` 等查询参数，凭据不再原样写入日志
+- 主密码校验改为常量时间比较
+
+### Changed
+
+- 运行环境要求 Node.js 22.5 及以上（`node:sqlite`）
+- 新增 Linux CI（类型检查、单元测试、lint），Windows 专用路径测试在其他平台跳过
+
 ## [1.1.0] - 2026-10-14
 
 ### Fixed

@@ -6,7 +6,7 @@
 
 AutoCheckin 是一款本地优先的自动签到桌面应用。任务、凭据和每一次执行记录都放在你自己的电脑上。到了你设定的时间，它用 HTTP/API、浏览器，或两种方式接续完成签到，再把结果留在本机。
 
-> 当前正式版本：**V1.1.0** · [下载安装包](https://github.com/Runa-Asahi/AutoCheckin_Engineering/releases/tag/v1.1.0)
+> 当前正式版本：**V1.1.1** · [下载安装包](https://github.com/Runa-Asahi/AutoCheckin_Engineering/releases/tag/v1.1.1)
 
 ![签到任务页：五个站点的计划、最近一次结果和连续签到天数](docs/images/preview.png)
 
@@ -56,7 +56,7 @@ AutoCheckin 是一款本地优先的自动签到桌面应用。任务、凭据�
 
 发布版可以跑在 Windows 10/11、macOS 和主流 Linux 上。浏览器任务第一次执行时需要联网，用来下载匹配版本的 Chromium。如果要复用本机浏览器档案，电脑上需要已经安装 Chrome 或 Edge。
 
-1. 从 [v1.1.0 发布页](https://github.com/Runa-Asahi/AutoCheckin_Engineering/releases/tag/v1.1.0) 下载对应平台的安装包。
+1. 从 [v1.1.1 发布页](https://github.com/Runa-Asahi/AutoCheckin_Engineering/releases/tag/v1.1.1) 下载对应平台的安装包。
 2. 第一次打开时设置主密码。之后启动会自动解锁。
 3. 添加任务，选一个内置适配器，或让 AI 向导帮你写一份。
 4. 需要一直自动签到时，在设置里打开开机自动启动。关闭窗口后程序仍在托盘中运行。
