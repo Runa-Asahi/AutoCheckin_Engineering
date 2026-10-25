@@ -1,3 +1,4 @@
+import { listPluginIds } from '../plugins/registry.js'
 import { AdapterSchema, type Adapter } from '../../shared/schemas.js'
 
 export type AdapterIssueSeverity = 'error' | 'warning' | 'info'
@@ -23,6 +24,12 @@ export function inspectAdapter(input: unknown): AdapterInspectionReport {
 }
 
 function inspectEngine(adapter: Adapter, issues: AdapterInspectionIssue[]): void {
+  if (adapter.engine_type === 'native') {
+    const ids = listPluginIds()
+    if (!adapter.plugin || !ids.includes(adapter.plugin.id)) add(issues, 'plugin_unknown', 'error', 'plugin.id', `未知的原生插件：${adapter.plugin?.id ?? '(空)'}。`, `可用插件：${ids.join(', ')}；其它站点请改用 http/hybrid/browser 引擎。`)
+    if (adapter.login_type !== 'cookie') add(issues, 'plugin_login_type', 'warning', 'login_type', '原生插件目前只读取任务保存的 Cookie。', '将 login_type 设为 cookie。')
+    return
+  }
   if (['http', 'api', 'hybrid'].includes(adapter.engine_type) && !adapter.request) add(issues, 'request_missing', 'error', 'request', `${adapter.engine_type} 引擎缺少 request 配置。`, '补充 HTTP 方法、URL、请求头和超时。')
   if (['browser', 'hybrid'].includes(adapter.engine_type) && !(adapter.steps?.length)) add(issues, 'steps_missing', 'error', 'steps', `${adapter.engine_type} 引擎缺少浏览器步骤。`, '至少添加 goto 和实际签到操作。')
   if (adapter.login_type === 'password' && !hasCredentialFill(adapter.steps ?? [])) add(issues, 'password_flow_missing', 'warning', 'steps', '密码登录任务没有可识别的用户名/密码填写步骤，Cookie 过期后无法自动恢复。', '补充登录步骤，或改为 manual/local_browser。')
@@ -30,7 +37,7 @@ function inspectEngine(adapter: Adapter, issues: AdapterInspectionIssue[]): void
 
 function inspectUrls(adapter: Adapter, issues: AdapterInspectionIssue[]): void {
   const site = new URL(adapter.site_url)
-  const urls = [adapter.request?.url, ...(adapter.steps ?? []).flatMap(collectStepUrls)].filter((value): value is string => typeof value === 'string')
+  const urls = [...(adapter.pre_requests ?? []).map((item) => item.url), adapter.request?.url, ...(adapter.steps ?? []).flatMap(collectStepUrls)].filter((value): value is string => typeof value === 'string')
   for (const [index, raw] of urls.entries()) {
     if (raw.includes('{{')) continue
     try {

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const EngineTypeSchema = z.enum(['http', 'browser', 'api', 'hybrid'])
+export const EngineTypeSchema = z.enum(['http', 'browser', 'api', 'hybrid', 'native'])
 export const LoginTypeSchema = z.enum(['password', 'cookie', 'manual', 'local_browser'])
 
 export const CreateTaskSchema = z.object({
@@ -63,24 +63,37 @@ export type TaskListQuery = z.infer<typeof TaskListQuerySchema>
 export type AIProvider = z.infer<typeof AIProviderSchema>
 export type AIProviderConfig = z.infer<typeof AIProviderConfigSchema>
 
+const RequestSchema = z.object({
+  method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
+  url: z.string(),
+  headers: z.record(z.string(), z.string()).optional(),
+  body: z.unknown().optional(),
+  /** body 为对象时以 application/x-www-form-urlencoded 编码发送。 */
+  form: z.boolean().optional(),
+  timeout_ms: z.number().int().positive().default(30000),
+})
+
 export const AdapterSchema = z.object({
   site_id: z.string(),
   site_name: z.string(),
   site_url: z.string().url(),
   engine_type: EngineTypeSchema,
   login_type: LoginTypeSchema,
-  request: z.object({
-    method: z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']),
-    url: z.string(),
-    headers: z.record(z.string(), z.string()).optional(),
-    body: z.unknown().optional(),
-    timeout_ms: z.number().int().positive().default(30000),
-  }).optional(),
+  description: z.string().max(500).optional(),
+  /** 给用户看的 Cookie 获取提示，例如需要哪些 Cookie 名。 */
+  cookie_hint: z.string().max(500).optional(),
+  /** engine_type=native 时使用的内置代码插件（如 netease_music、bilibili）。 */
+  plugin: z.object({ id: z.string().min(1), options: z.record(z.string(), z.unknown()).default({}) }).optional(),
+  /** 主请求之前依次执行的请求，可用 extract 把 JSON 字段提取为模板变量，供后续请求使用。 */
+  pre_requests: z.array(RequestSchema.extend({
+    extract: z.record(z.string(), z.string()).optional(),
+  })).max(5).optional(),
+  request: RequestSchema.optional(),
   steps: z.array(z.record(z.string(), z.unknown())).optional(),
   success_rules: z.array(z.object({
     type: z.enum(['status', 'body_includes', 'body_regex', 'json_path']),
     value: z.unknown(),
-  })).min(1),
+  })).default([]),
   success_logic: z.enum(['and', 'or']).default('or'),
   failure_rules: z.array(z.object({
     type: z.enum(['body_includes', 'body_regex']),
@@ -88,6 +101,10 @@ export const AdapterSchema = z.object({
     outcome: z.enum(['not_ready', 'retryable_error', 'authentication_required', 'manual_action_required', 'permanent_failure']),
   })).max(20).optional(),
   cookie_domains: z.array(z.string()).default([]),
+}).superRefine((adapter, ctx) => {
+  if (adapter.engine_type === 'native') {
+    if (!adapter.plugin) ctx.addIssue({ code: 'custom', path: ['plugin'], message: 'native 引擎需要 plugin.id' })
+  } else if (!adapter.success_rules.length) ctx.addIssue({ code: 'custom', path: ['success_rules'], message: '至少需要一条 success_rules' })
 })
 
 export type Adapter = z.infer<typeof AdapterSchema>

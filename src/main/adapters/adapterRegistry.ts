@@ -21,10 +21,7 @@ export class AdapterRegistry {
   }
 
   list(): AdapterSummary[] {
-    return [...this.adapters.values()].map((adapter) => ({
-      id: adapter.site_id, siteId: adapter.site_id, siteName: adapter.site_name, siteUrl: adapter.site_url,
-      engineType: adapter.engine_type, loginType: adapter.login_type,
-    }))
+    return [...this.adapters.values()].map(toSummary)
   }
 
   async saveCustom(raw: unknown): Promise<AdapterSummary> {
@@ -32,7 +29,7 @@ export class AdapterRegistry {
     await mkdir(root, { recursive: true })
     await writeFile(join(root, `${adapter.site_id.replace(/[^a-zA-Z0-9_-]/g, '_')}.json`), JSON.stringify(adapter, null, 2), 'utf8')
     this.adapters.set(adapter.site_id, adapter)
-    return { id: adapter.site_id, siteId: adapter.site_id, siteName: adapter.site_name, siteUrl: adapter.site_url, engineType: adapter.engine_type, loginType: adapter.login_type }
+    return toSummary(adapter)
   }
 
   private async loadDirectory(root: string, optional = false): Promise<void> {
@@ -43,6 +40,13 @@ export class AdapterRegistry {
       const parsed = AdapterSchema.parse(JSON.parse(await readFile(join(root, filename), 'utf8')))
       this.adapters.set(parsed.site_id, upgradeAdapterForRuntime(parsed))
     }
+  }
+}
+
+export function toSummary(adapter: Adapter): AdapterSummary {
+  return {
+    id: adapter.site_id, siteId: adapter.site_id, siteName: adapter.site_name, siteUrl: adapter.site_url,
+    engineType: adapter.engine_type, loginType: adapter.login_type, description: adapter.description, cookieHint: adapter.cookie_hint,
   }
 }
 

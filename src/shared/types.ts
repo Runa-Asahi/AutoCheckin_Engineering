@@ -21,7 +21,7 @@ export interface Task {
   id: string
   site_id: string
   site_name: string
-  engine_type: 'http' | 'browser' | 'api' | 'hybrid'
+  engine_type: 'http' | 'browser' | 'api' | 'hybrid' | 'native'
   login_type: 'password' | 'cookie' | 'manual' | 'local_browser'
   schedule: string
   enabled: number
@@ -110,6 +110,8 @@ export interface AdapterSummary {
   siteUrl: string
   engineType: Task['engine_type']
   loginType: Task['login_type']
+  description?: string
+  cookieHint?: string
 }
 
 export interface AutoCheckinApi {
