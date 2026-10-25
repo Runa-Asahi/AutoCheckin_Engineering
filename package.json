@@ -1,8 +1,8 @@
 {
   "name": "autocheckin",
-  "version": "1.1.1",
+  "version": "2.0.0-alpha.1",
   "private": true,
-  "description": "Local-first automatic check-in manager",
+  "description": "扫码即用的自动签到桌面应用",
   "author": {
     "name": "AutoCheckin Contributors",
     "email": "256862649@qq.com"
@@ -25,32 +25,22 @@
     "test:e2e": "playwright test",
     "lint": "eslint .",
     "package": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder --publish never",
-    "db:generate": "drizzle-kit generate"
+    "dist": "npm run build && electron-builder --publish never"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
     "axios": "^1.11.0",
-    "drizzle-orm": "^0.44.4",
     "element-plus": "^2.10.7",
-    "node-cron": "^4.2.1",
-    "pinia": "^3.0.3",
-    "playwright": "^1.54.2",
+    "qrcode": "^1.5.4",
     "vue": "^3.5.18",
-    "vue-router": "^4.5.1",
     "zod": "^4.0.17"
-  },
-  "optionalDependencies": {
-    "better-sqlite3": "11.8.1",
-    "keytar": "^7.9.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.54.2",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.17.1",
+    "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-vue": "^6.0.1",
-    "drizzle-kit": "^0.31.4",
     "electron": "^37.2.6",
     "electron-builder": "^26.0.12",
     "electron-vite": "^4.0.0",
@@ -69,9 +59,7 @@
     "appId": "com.autocheckin.desktop",
     "productName": "AutoCheckin",
     "asarUnpack": [
-      "**/*.node",
-      "node_modules/playwright/**",
-      "node_modules/playwright-core/**"
+      "**/*.node"
     ],
     "npmRebuild": false,
     "files": [
@@ -80,10 +68,6 @@
       "package.json"
     ],
     "extraResources": [
-      {
-        "from": "resources/adapters",
-        "to": "adapters"
-      },
       {
         "from": "resources/tray.png",
         "to": "tray.png"

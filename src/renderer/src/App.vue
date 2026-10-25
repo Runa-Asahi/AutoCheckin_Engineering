@@ -1,52 +1,147 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { Calendar, Setting, Plus, DataAnalysis, MagicStick, Bell } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
-import { useRoute, useRouter } from 'vue-router'
-import type { AppNotification, BrowserProgress, CheckinOutcome } from '../../shared/types'
-import { explainBrowserFailure } from '../../shared/browserFailure'
-import brandMark from './assets/mark.png'
-const route = useRoute(), router = useRouter()
-const notifications=ref<AppNotification[]>([]),drawer=ref(false),progress=ref<BrowserProgress|null>(null)
-const unread=computed(()=>notifications.value.filter(item=>!item.read).length)
-const guidanceOutcomes: CheckinOutcome[] = ['authentication_required', 'manual_action_required', 'permanent_failure']
-const needsGuidance = computed(() => Boolean(progress.value?.phase === 'failed' && progress.value.taskId && guidanceOutcomes.includes(progress.value.outcome ?? 'permanent_failure')))
-const guidanceTitle = computed(() => progress.value?.outcome === 'authentication_required' ? '需要登录后继续' : progress.value?.outcome === 'manual_action_required' ? '需要手动处理' : '签到没有完成')
-let unbindNotification:(()=>void)|undefined,unbindProgress:(()=>void)|undefined
-async function openNotifications(){drawer.value=true;notifications.value=await window.api.notification.list()}
-async function mark(item:AppNotification){if(!item.read){await window.api.notification.markRead(item.id);item.read=true}}
-async function clearAll(){await window.api.notification.clear();notifications.value=[]}
-function dismissProgress(): void { progress.value = null }
-async function manualFromProgress(): Promise<void> {
-  const id = progress.value?.taskId
-  if (!id) return
-  try { await window.api.task.promptManualLogin(id); ElMessage.info('已打开登录窗口。请在窗口里完成登录和一次签到，然后关闭整个浏览器窗口。') }
-  catch (error) { ElMessage.error(error instanceof Error ? error.message : String(error)) }
+import { ElMessage, ElMessageBox } from 'element-plus'
+import type { AccountView, AppSettingsView, PlatformInfo, TaskStatus } from '../../shared/types'
+import { AI_PROVIDER_PRESETS } from '../../shared/aiProviders'
+import mark from './assets/mark.png'
+
+const platforms = ref<PlatformInfo[]>([]), accounts = ref<AccountView[]>([])
+const adding = ref(false), chosen = ref<PlatformInfo | null>(null), qrImage = ref(''), qrMessage = ref(''), qrSession = ref(''), qrExpired = ref(false)
+const settingsOpen = ref(false), settings = ref<AppSettingsView | null>(null), aiKey = ref(''), explanations = ref<Record<string, string>>({}), explaining = ref<Record<string, boolean>>({})
+let pollTimer: number | undefined, unsubscribe: (() => void) | undefined
+
+const platformOf = (id: string) => platforms.value.find((p) => p.id === id)
+const statusText: Record<TaskStatus, string> = { success: '✔ 成功', already: '✔ 已完成', failed: '✘ 失败', login_expired: '⚠ 需登录', skipped: '– 跳过' }
+const statusClass: Record<TaskStatus, string> = { success: 'ok', already: 'ok', failed: 'bad', login_expired: 'warn', skipped: 'muted' }
+const hasFailure = (a: AccountView) => Boolean(a.lastRun?.results.some((r) => r.status === 'failed'))
+const when = (iso: string) => new Date(iso).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+const aiPresets = computed(() => AI_PROVIDER_PRESETS)
+
+async function refresh(): Promise<void> { accounts.value = await window.api.accounts() }
+function openAdd(): void { adding.value = true; chosen.value = null; stopQr() }
+async function choose(p: PlatformInfo): Promise<void> {
+  chosen.value = p; qrExpired.value = false; qrImage.value = ''; qrMessage.value = '正在获取二维码…'
+  try {
+    const start = await window.api.startQrLogin(p.id)
+    qrSession.value = start.sessionId; qrImage.value = start.image; qrMessage.value = p.loginHint
+    pollTimer = window.setInterval(poll, 2000)
+  } catch (error) { qrMessage.value = `获取二维码失败：${(error as Error).message}`; qrExpired.value = true }
 }
-function openFailureDetail(): void { const id = progress.value?.taskId; if (id) void router.push(`/tasks/${id}`) }
-function openFailureFix(): void { const id = progress.value?.taskId; if (id) void router.push({ path: `/tasks/${id}`, query: { diagnose: '1' } }) }
-let progressTimer: ReturnType<typeof setTimeout> | undefined
-onMounted(async()=>{notifications.value=await window.api.notification.list();unbindNotification=window.api.notification.onNew(item=>notifications.value.unshift(item));unbindProgress=window.api.task.onBrowserProgress(value=>{if(progressTimer) clearTimeout(progressTimer); const sticky=value.phase==='failed' && Boolean(value.taskId) && guidanceOutcomes.includes(value.outcome ?? 'permanent_failure'); progress.value={...value, message: explainBrowserFailure(value.message)}; if(!sticky && (value.phase==='completed'||value.phase==='failed'||value.phase==='ready')){progressTimer=setTimeout(()=>{progress.value=null}, value.phase==='ready'?800:1200)}})})
-onBeforeUnmount(()=>{if(progressTimer) clearTimeout(progressTimer)})
-onBeforeUnmount(()=>{unbindNotification?.();unbindProgress?.()})
+async function poll(): Promise<void> {
+  if (!qrSession.value) return
+  try {
+    const r = await window.api.pollQrLogin(qrSession.value)
+    qrMessage.value = r.message
+    if (r.state === 'success') { stopQr(); adding.value = false; ElMessage.success(r.message); await refresh() }
+    else if (r.state === 'expired' || r.state === 'error') { stopQr(); qrExpired.value = true }
+  } catch (error) { qrMessage.value = (error as Error).message }
+}
+function stopQr(): void { if (pollTimer) window.clearInterval(pollTimer); pollTimer = undefined; if (qrSession.value) void window.api.cancelQrLogin(qrSession.value); qrSession.value = '' }
+function closeAdd(): void { stopQr(); adding.value = false }
+
+async function toggleTask(a: AccountView, taskId: string, value: boolean): Promise<void> { await window.api.updateAccount({ id: a.id, tasks: { ...a.tasks, [taskId]: value } }) }
+async function setTime(a: AccountView, value: string | null): Promise<void> { if (value) await window.api.updateAccount({ id: a.id, time: value }) }
+async function setEnabled(a: AccountView, value: boolean): Promise<void> { await window.api.updateAccount({ id: a.id, enabled: value }) }
+async function run(a: AccountView): Promise<void> { delete explanations.value[a.id]; await window.api.runNow(a.id) }
+async function relogin(a: AccountView): Promise<void> { adding.value = true; const p = platformOf(a.platform); if (p) await choose(p) }
+async function remove(a: AccountView): Promise<void> {
+  await ElMessageBox.confirm(`确定移除 ${a.platformName}「${a.nickname}」吗？本机保存的登录信息会一起删除。`, '移除账号', { type: 'warning', confirmButtonText: '移除', cancelButtonText: '取消' })
+  await window.api.removeAccount(a.id)
+}
+async function explain(a: AccountView): Promise<void> {
+  explaining.value[a.id] = true
+  try { explanations.value[a.id] = await window.api.explainFailure(a.id) } catch (error) { ElMessage.warning((error as Error).message) } finally { explaining.value[a.id] = false }
+}
+
+async function openSettings(): Promise<void> { settings.value = await window.api.settings(); aiKey.value = ''; settingsOpen.value = true }
+async function saveSettings(): Promise<void> {
+  if (!settings.value) return
+  const s = settings.value
+  settings.value = await window.api.saveSettings({ notifications: s.notifications, autoLaunch: s.autoLaunch, ai: { enabled: s.ai.enabled, provider: s.ai.provider, baseUrl: s.ai.baseUrl, model: s.ai.model, ...(aiKey.value ? { apiKey: aiKey.value } : {}) } })
+  aiKey.value = ''; ElMessage.success('已保存')
+}
+function pickPreset(id: string): void { const p = AI_PROVIDER_PRESETS.find((x) => x.id === id); if (p && settings.value) { settings.value.ai.baseUrl = p.baseUrl || settings.value.ai.baseUrl; settings.value.ai.model = p.defaultModel } }
+
+onMounted(async () => { platforms.value = await window.api.platforms(); await refresh(); unsubscribe = window.api.onAccountsChanged((list) => { accounts.value = list }) })
+onBeforeUnmount(() => { stopQr(); unsubscribe?.() })
 </script>
 
 <template>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand"><img class="brand-mark" :src="brandMark" alt="" /><div><strong>AutoCheckin</strong><span>LOCAL AUTOMATION</span></div></div>
-      <nav>
-        <router-link to="/" :class="{ active: route.path === '/' }"><el-icon><Calendar /></el-icon><span>签到任务</span></router-link>
-        <router-link to="/tasks/new" :class="{ active: route.path === '/tasks/new' }"><el-icon><Plus /></el-icon><span>添加任务</span></router-link>
-        <router-link to="/statistics" :class="{ active: route.path === '/statistics' }"><el-icon><DataAnalysis /></el-icon><span>统计中心</span></router-link>
-        <router-link to="/ai-guide" :class="{ active: route.path === '/ai-guide' }"><el-icon><MagicStick /></el-icon><span>AI 向导</span></router-link>
-        <router-link to="/settings" :class="{ active: route.path === '/settings' }"><el-icon><Setting /></el-icon><span>设置</span></router-link>
-      </nav>
-      <div class="privacy-card"><div class="privacy-dot"></div><strong>数据仅保存在本地</strong><p>凭据与 Cookie 均经过 AES-256-GCM 加密。</p></div>
-      <div class="version">AutoCheckin · v1.1.1</div>
-    </aside>
-    <main class="main-content"><button class="notification-button" @click="openNotifications"><el-badge :value="unread" :hidden="!unread"><el-icon><Bell/></el-icon></el-badge></button><router-view /></main>
-    <el-drawer v-model="drawer" title="通知中心" size="360px"><div class="notification-actions"><span>最近 50 条通知</span><el-button text @click="clearAll">清空</el-button></div><div v-if="notifications.length" class="notification-list"><button v-for="item in notifications" :key="item.id" :class="['notification-item',item.level,{unread:!item.read}]" @click="mark(item)"><i></i><div><strong>{{item.title}}</strong><p>{{item.message}}</p><span>{{new Date(item.createdAt).toLocaleString('zh-CN')}}</span></div></button></div><div v-else class="notification-empty">暂无通知</div></el-drawer>
-    <div v-if="progress" class="browser-progress" :class="{ attention: needsGuidance }"><div><strong>{{ needsGuidance ? guidanceTitle : progress.message }}</strong><button v-if="needsGuidance" class="progress-close" @click="dismissProgress">关闭</button><span v-else>{{progress.percent}}%</span></div><p v-if="needsGuidance">{{progress.message}}</p><el-progress :percentage="progress.percent" :show-text="false" :status="needsGuidance ? 'exception' : undefined"/><div v-if="needsGuidance" class="progress-actions"><button @click="manualFromProgress">手动处理</button><button @click="openFailureDetail">查看原因</button><button @click="openFailureFix">修复方案</button></div></div>
+  <div class="page">
+    <header class="top">
+      <img :src="mark" alt="" />
+      <h1>AutoCheckin 自动签到</h1>
+      <el-button @click="openSettings">设置</el-button>
+      <el-button type="primary" @click="openAdd">＋ 添加账号</el-button>
+    </header>
+
+    <section v-if="!accounts.length" class="empty">
+      <h2>还没有账号</h2>
+      <p>点“添加账号”，用手机 App 扫一下二维码就好，不需要复制任何东西。</p>
+      <el-button type="primary" size="large" @click="openAdd">＋ 扫码添加账号</el-button>
+    </section>
+
+    <article v-for="a in accounts" :key="a.id" class="card">
+      <div class="card-head">
+        <div class="badge" :class="a.platform">{{ a.platformName.slice(0, 1) }}</div>
+        <div class="who"><strong>{{ a.nickname }}</strong><span>{{ a.platformName }}</span></div>
+        <el-switch :model-value="a.enabled" active-text="自动签到" @update:model-value="(v: string | number | boolean) => setEnabled(a, Boolean(v))" />
+        <el-button type="primary" :loading="a.running" @click="run(a)">{{ a.running ? '正在签到…' : '立即签到' }}</el-button>
+        <el-button text type="danger" @click="remove(a)">移除</el-button>
+      </div>
+
+      <div v-if="a.loginExpired" class="expired"><span>登录已过期，需要重新扫码一次。</span><el-button size="small" type="warning" @click="relogin(a)">重新扫码</el-button></div>
+
+      <div class="row">
+        <label v-for="t in platformOf(a.platform)?.tasks ?? []" :key="t.id" class="task">
+          <el-checkbox :model-value="a.tasks[t.id]" @update:model-value="(v: string | number | boolean) => toggleTask(a, t.id, Boolean(v))" />
+          <span>{{ t.label }}<small>{{ t.description }}</small></span>
+        </label>
+      </div>
+      <div class="schedule">每天 <el-time-select :model-value="a.time" start="00:00" step="00:30" end="23:30" style="width: 110px" :clearable="false" @update:model-value="(v: string) => setTime(a, v)" /> 自动执行（电脑开着、软件在托盘里时生效）</div>
+
+      <div v-if="a.lastRun" class="results">
+        <div class="muted" style="font-size: 13px; margin-bottom: 6px">最近一次：{{ when(a.lastRun.at) }}（{{ a.lastRun.trigger === 'manual' ? '手动' : '自动' }}）</div>
+        <div v-for="r in a.lastRun.results" :key="r.taskId" class="result">
+          <span class="dot" :class="statusClass[r.status]">{{ statusText[r.status] }}</span>
+          <span><b>{{ r.label }}</b>：{{ r.message }}</span>
+        </div>
+        <div v-if="!a.lastRun.results.length" class="muted">没有勾选任何任务。</div>
+        <el-button v-if="hasFailure(a)" link type="primary" :loading="explaining[a.id]" @click="explain(a)">用 AI 帮我看看为什么失败</el-button>
+        <div v-if="explanations[a.id]" class="explain">{{ explanations[a.id] }}</div>
+      </div>
+    </article>
+
+    <el-dialog v-model="adding" title="添加账号" width="460px" @close="closeAdd">
+      <div v-if="!chosen" class="platforms">
+        <button v-for="p in platforms" :key="p.id" @click="choose(p)"><div class="badge" :class="p.id">{{ p.name.slice(0, 1) }}</div>{{ p.name }}</button>
+      </div>
+      <div v-else class="qr">
+        <img v-if="qrImage && !qrExpired" :src="qrImage" alt="登录二维码" />
+        <p>{{ qrMessage }}</p>
+        <el-button v-if="qrExpired" type="primary" @click="choose(chosen)">刷新二维码</el-button>
+        <el-button text @click="stopQr(); chosen = null">换一个平台</el-button>
+      </div>
+    </el-dialog>
+
+    <el-drawer v-model="settingsOpen" title="设置" size="420px">
+      <template v-if="settings">
+        <el-form label-position="top">
+          <el-form-item><el-checkbox v-model="settings.notifications">签到完成后弹出系统通知</el-checkbox></el-form-item>
+          <el-form-item><el-checkbox v-model="settings.autoLaunch">开机自动启动（在托盘里静默运行）</el-checkbox></el-form-item>
+          <el-collapse>
+            <el-collapse-item title="高级：AI 解释失败原因（可选）" name="ai">
+              <p class="muted" style="font-size: 13px">开启后，签到失败时可以让 AI 用大白话解释原因。只会发送脱敏后的结果文字，不会发送登录信息。</p>
+              <el-form-item><el-checkbox v-model="settings.ai.enabled">开启 AI 解释</el-checkbox></el-form-item>
+              <el-form-item label="服务商"><el-select v-model="settings.ai.provider" @change="pickPreset"><el-option v-for="p in aiPresets" :key="p.id" :label="p.label" :value="p.id" /></el-select></el-form-item>
+              <el-form-item label="接口地址"><el-input v-model="settings.ai.baseUrl" /></el-form-item>
+              <el-form-item label="模型"><el-input v-model="settings.ai.model" /></el-form-item>
+              <el-form-item :label="settings.ai.hasKey ? 'API Key（已保存，留空不修改）' : 'API Key'"><el-input v-model="aiKey" type="password" show-password /></el-form-item>
+            </el-collapse-item>
+          </el-collapse>
+          <el-button type="primary" style="margin-top: 16px" @click="saveSettings">保存</el-button>
+        </el-form>
+      </template>
+    </el-drawer>
   </div>
 </template>

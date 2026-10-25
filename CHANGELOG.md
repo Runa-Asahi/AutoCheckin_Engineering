@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.0-alpha.1（未发布）
+
+- 全新重写：扫码登录，简单界面，每项任务都在执行后确认结果
+- 网易云音乐：采用与 NeteaseCloudMusicApi 一致的 eapi / weapi 加密，签到后查询 `mobileSign` / `pcSign` 确认结果
+- 哔哩哔哩：扫码登录；观看、分享、投币、漫画签到，执行后查询任务状态确认
+- 移除主密码、适配器 JSON、浏览器自动化和 AI 生成适配器；AI 只保留“解释失败原因”
+
+
 本项目遵循 [Semantic Versioning](https://semver.org/)。
 
 ## [1.1.1] - 2026-10-16
