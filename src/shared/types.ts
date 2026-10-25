@@ -5,7 +5,7 @@ export type TaskStatus = 'success' | 'already' | 'failed' | 'login_expired' | 's
 export interface TaskResult { taskId: string; label: string; status: TaskStatus; message: string }
 
 export interface PlatformTaskInfo { id: string; label: string; description: string; defaultOn: boolean }
-export interface PlatformInfo { id: string; name: string; loginHint: string; tasks: PlatformTaskInfo[] }
+export interface PlatformInfo { id: string; name: string; loginHint: string; loginKind: 'qr' | 'web'; tasks: PlatformTaskInfo[] }
 
 export interface RunRecord { at: string; date: string; trigger: 'manual' | 'schedule'; results: TaskResult[]; attempt: number }
 
@@ -29,7 +29,7 @@ export interface QrStart { sessionId: string; image: string }
 export interface QrPoll { state: QrState; message: string; account?: AccountView }
 
 export interface AISettingsView { enabled: boolean; provider: AIProviderConfig['provider']; baseUrl: string; model: string; hasKey: boolean }
-export interface AppSettingsView { notifications: boolean; autoLaunch: boolean; ai: AISettingsView }
+export interface AppSettingsView { notifications: boolean; autoLaunch: boolean; ai: AISettingsView; /** false 表示系统钥匙串不可用，已改用本地密钥加密 */ keychainAvailable?: boolean }
 
 export interface AutoCheckinApi {
   platforms(): Promise<PlatformInfo[]>
@@ -37,6 +37,8 @@ export interface AutoCheckinApi {
   startQrLogin(platform: string): Promise<QrStart>
   pollQrLogin(sessionId: string): Promise<QrPoll>
   cancelQrLogin(sessionId: string): Promise<void>
+  /** 打开官方登录窗口，登录完成后自动保存账号。 */
+  webLogin(platform: string): Promise<QrPoll>
   updateAccount(input: UpdateAccountInput): Promise<AccountView>
   removeAccount(id: string): Promise<void>
   runNow(id: string): Promise<AccountView>

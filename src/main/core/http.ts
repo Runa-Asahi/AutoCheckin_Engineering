@@ -3,6 +3,21 @@ import axios, { type AxiosResponse } from 'axios'
 export const DESKTOP_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
 const RETRYABLE = new Set(['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED', 'EPIPE'])
 
+/**
+ * 网络白名单：只允许访问各平台官方域名（以及它们的子域名）。
+ * 任何其它地址（含局域网、本机）都会被拒绝，防止数据被发往第三方。
+ * AI 服务由用户在“高级设置”中显式填写，走独立客户端，不经过这里。
+ */
+export const ALLOWED_DOMAINS = ['music.163.com', 'bilibili.com', 'baidu.com', 'luogu.com.cn']
+
+export function isAllowedUrl(raw: string): boolean {
+  let url: URL
+  try { url = new URL(raw) } catch { return false }
+  if (url.protocol !== 'https:') return false
+  const host = url.hostname.toLowerCase()
+  return ALLOWED_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`))
+}
+
 /** 平台能识别并转换成“请重新扫码”的错误。 */
 export class LoginExpiredError extends Error { constructor(message = '登录已过期，请重新扫码登录') { super(message); this.name = 'LoginExpiredError' } }
 /** 网络或服务端暂时性错误。 */
@@ -43,6 +58,7 @@ export class HttpSession {
   }
 
   async request(options: RequestOptions): Promise<AxiosResponse> {
+    if (!isAllowedUrl(options.url)) throw new NetworkError(`已拦截不在白名单内的网络请求：${safeHost(options.url)}`)
     const retries = this.opts.retries ?? 2, sleep = this.opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)))
     let lastError: Error = new NetworkError('网络请求失败')
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -52,7 +68,8 @@ export class HttpSession {
         let data: unknown
         if (options.form) { data = new URLSearchParams(Object.entries(options.form).map(([k, v]) => [k, String(v)])).toString(); headers['Content-Type'] = 'application/x-www-form-urlencoded' }
         else if (options.json !== undefined) { data = options.json; headers['Content-Type'] = 'application/json' }
-        const response = await axios.request({ method: options.method ?? 'GET', url: options.url, params: options.params, data, headers, timeout: options.timeoutMs ?? 15_000, maxRedirects: 3, validateStatus: () => true })
+        const response = await axios.request({ method: options.method ?? 'GET', url: options.url, params: options.params, data, headers, timeout: options.timeoutMs ?? 15_000, maxRedirects: 3, validateStatus: () => true,
+          beforeRedirect: (redirect: { href?: string }) => { if (!isAllowedUrl(String(redirect.href ?? ''))) throw new NetworkError('已拦截跳转到白名单外的地址') } })
         this.absorb(response.headers['set-cookie'])
         if (response.status === 429 || response.status >= 500) { lastError = new NetworkError(`服务器暂时不可用（HTTP ${response.status}）`) }
         else if (response.status === 412) throw new NetworkError('请求被平台风控拦截（HTTP 412），请稍后再试')
@@ -80,3 +97,5 @@ export class HttpSession {
     }
   }
 }
+
+function safeHost(raw: string): string { try { return new URL(raw).host } catch { return '无效地址' } }

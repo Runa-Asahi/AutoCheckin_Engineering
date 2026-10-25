@@ -14,5 +14,7 @@ test('启动后显示扫码添加账号入口', async () => {
     await window.getByRole('button', { name: '＋ 扫码添加账号' }).click()
     await expect(window.getByRole('button', { name: /网易云音乐/ })).toBeVisible()
     await expect(window.getByRole('button', { name: /哔哩哔哩/ })).toBeVisible()
+    await expect(window.getByRole('button', { name: /百度贴吧/ })).toBeVisible()
+    await expect(window.getByRole('button', { name: /洛谷/ })).toBeVisible()
   } finally { await app.close() }
 })

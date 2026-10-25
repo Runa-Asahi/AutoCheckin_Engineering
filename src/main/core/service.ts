@@ -25,11 +25,12 @@ export class CheckinService {
   private readonly ai: Pick<UnifiedAIClient, 'generate'>
   constructor(private readonly store: Store, private readonly hooks: ServiceHooks = {}) { this.ai = hooks.ai ?? new UnifiedAIClient() }
 
-  platforms(): PlatformInfo[] { return PLATFORMS.map(({ id, name, loginHint, tasks }) => ({ id, name, loginHint, tasks })) }
+  platforms(): PlatformInfo[] { return PLATFORMS.map(({ id, name, loginHint, tasks, webLogin }) => ({ id, name, loginHint, tasks, loginKind: webLogin ? 'web' : 'qr' })) }
   accounts(): AccountView[] { return this.store.accounts().map((account) => this.view(account)) }
 
   async startQrLogin(platformId: string): Promise<QrStart> {
     const platform = getPlatform(platformId), http = new HttpSession()
+    if (!platform.qrStart) throw new Error(`${platform.name} 不支持扫码登录`)
     const ticket = await platform.qrStart(http)
     const sessionId = randomUUID()
     this.qr.set(sessionId, { platform: platformId, key: ticket.key, http, createdAt: Date.now() })
@@ -40,6 +41,7 @@ export class CheckinService {
     const entry = this.qr.get(sessionId)
     if (!entry) return { state: 'expired', message: '二维码已失效，请刷新' }
     const platform = getPlatform(entry.platform)
+    if (!platform.qrPoll) return { state: 'error', message: '该平台不支持扫码登录' }
     const state = await platform.qrPoll(entry.http, entry.key)
     if (state.state !== 'success') { if (state.state === 'expired' || state.state === 'error') this.qr.delete(sessionId); return state }
     this.qr.delete(sessionId)
@@ -50,6 +52,21 @@ export class CheckinService {
   }
 
   cancelQrLogin(sessionId: string): void { this.qr.delete(sessionId) }
+
+  /** 网页登录完成后调用：只保留声明的登录 Cookie，校验登录有效后保存账号。 */
+  async completeWebLogin(platformId: string, captured: Record<string, string>): Promise<QrPoll> {
+    const platform = getPlatform(platformId)
+    if (!platform.webLogin) return { state: 'error', message: '该平台不支持网页登录' }
+    const missing = platform.webLogin.requiredCookies.filter((name) => !captured[name])
+    if (missing.length) return { state: 'error', message: '没有检测到登录完成，请在窗口里完成登录' }
+    const http = new HttpSession(captured)
+    try {
+      const profile = await platform.profile(http)
+      const record = this.store.upsertAccount({ platform: platform.id, uid: profile.uid, nickname: profile.nickname, cookies: http.cookies, tasks: Object.fromEntries(platform.tasks.map((task) => [task.id, task.defaultOn])) })
+      this.changed()
+      return { state: 'success', message: `已添加 ${profile.nickname}`, account: this.view(record) }
+    } catch (error) { return { state: 'error', message: `登录校验失败：${(error as Error).message}` } }
+  }
 
   update(input: UpdateAccountInput): AccountView {
     const { id, ...patch } = input

@@ -7,6 +7,7 @@ const api: AutoCheckinApi = {
   startQrLogin: (platform) => ipcRenderer.invoke('qr:start', platform),
   pollQrLogin: (id) => ipcRenderer.invoke('qr:poll', id),
   cancelQrLogin: (id) => ipcRenderer.invoke('qr:cancel', id),
+  webLogin: (platform) => ipcRenderer.invoke('web:login', platform),
   updateAccount: (input) => ipcRenderer.invoke('account:update', input),
   removeAccount: (id) => ipcRenderer.invoke('account:remove', id),
   runNow: (id) => ipcRenderer.invoke('account:run', id),

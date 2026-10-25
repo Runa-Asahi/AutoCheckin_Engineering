@@ -2,6 +2,10 @@ import { app, BrowserWindow, Notification, ipcMain, powerMonitor, safeStorage, s
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Store, type Cipher } from './core/store.js'
+import { createLocalKeyCipher } from './core/localCipher.js'
+import { getPlatform } from './core/platforms/index.js'
+import type { WebLogin } from './core/platform.js'
+import { randomUUID } from 'node:crypto'
 import { CheckinService } from './core/service.js'
 import { AIProviderConfigSchema, UpdateAccountSchema } from '../shared/schemas.js'
 import { createAppTray, resourcePath, type TrayController } from './tray.js'
@@ -12,10 +16,56 @@ let mainWindow: BrowserWindow | null = null
 let allowQuit = false
 let timer: NodeJS.Timeout | undefined
 
-/** 使用操作系统钥匙串加密（Windows DPAPI / macOS Keychain / Linux libsecret）。不可用时退化为明文并在日志中提示。 */
-const cipher: Cipher = {
-  encrypt: (plain) => safeStorage.isEncryptionAvailable() ? `enc:${safeStorage.encryptString(plain).toString('base64')}` : `raw:${Buffer.from(plain).toString('base64')}`,
-  decrypt: (value) => value.startsWith('enc:') ? safeStorage.decryptString(Buffer.from(value.slice(4), 'base64')) : Buffer.from(value.replace(/^raw:/, ''), 'base64').toString('utf8'),
+/**
+ * 凭据加密：优先使用操作系统钥匙串（Windows DPAPI / macOS Keychain / Linux libsecret）。
+ * 钥匙串不可用时改用本地 AES-256-GCM 密钥（0600），并在设置页明确提示；任何情况下都不明文保存。
+ */
+let keychainAvailable = true
+function createCipher(): Cipher {
+  keychainAvailable = safeStorage.isEncryptionAvailable()
+  const local = createLocalKeyCipher(join(app.getPath('userData'), 'local.key'))
+  return {
+    encrypt: (plain) => keychainAvailable ? `enc:${safeStorage.encryptString(plain).toString('base64')}` : local.encrypt(plain),
+    decrypt: (value) => {
+      if (value.startsWith('enc:')) return safeStorage.decryptString(Buffer.from(value.slice(4), 'base64'))
+      // alpha.1 在无钥匙串时的旧格式：读出后下次保存即改为加密格式
+      if (value.startsWith('raw:')) return Buffer.from(value.slice(4), 'base64').toString('utf8')
+      return local.decrypt(value)
+    },
+  }
+}
+
+/** 打开平台官方登录页（独立、不持久化的会话），用户自行登录后截获声明的登录 Cookie。 */
+function openWebLogin(platformId: string, login: WebLogin, parent: BrowserWindow | null): Promise<Record<string, string> | null> {
+  return new Promise((resolve) => {
+    const partition = `login-${randomUUID()}`
+    const window = new BrowserWindow({ width: 480, height: 720, parent: parent ?? undefined, modal: Boolean(parent), title: '登录', autoHideMenuBar: true, webPreferences: { partition, contextIsolation: true, nodeIntegration: false, sandbox: true } })
+    const allowed = (raw: string): boolean => { try { const host = new URL(raw).hostname; return login.domains.some((d) => host === d || host.endsWith(`.${d}`)) } catch { return false } }
+    window.webContents.on('will-navigate', (event, url) => { if (!allowed(url)) event.preventDefault() })
+    window.webContents.setWindowOpenHandler(({ url }) => { if (allowed(url)) void window.loadURL(url); return { action: 'deny' } })
+    let done = false
+    const finish = (value: Record<string, string> | null): void => {
+      if (done) return
+      done = true; clearInterval(timer)
+      const ses = window.webContents.session
+      if (!window.isDestroyed()) window.destroy()
+      void ses.clearStorageData()
+      resolve(value)
+    }
+    const timer = setInterval(async () => {
+      if (window.isDestroyed()) return finish(null)
+      const all = await window.webContents.session.cookies.get({})
+      const jar: Record<string, string> = {}
+      for (const cookie of all) {
+        const domain = (cookie.domain ?? '').replace(/^\./, '')
+        if (login.domains.some((d) => domain === d || domain.endsWith(`.${d}`))) jar[cookie.name] = cookie.value
+      }
+      if (login.requiredCookies.every((name) => jar[name] && jar[name] !== '0')) finish(jar)
+    }, 1000)
+    window.on('closed', () => finish(null))
+    void window.loadURL(login.url)
+    console.info(`已打开 ${platformId} 登录窗口`)
+  })
 }
 
 function showMainWindow(): void {
@@ -34,7 +84,8 @@ function showMainWindow(): void {
 }
 
 async function start(): Promise<void> {
-  if (!safeStorage.isEncryptionAvailable()) console.warn('系统钥匙串不可用，登录信息将仅做编码保存')
+  const cipher = createCipher()
+  if (!keychainAvailable) console.warn('系统钥匙串不可用，已改用本地密钥加密登录信息')
   const store = new Store(join(app.getPath('userData'), 'autocheckin-v2.json'), cipher)
   const broadcast = (channel: string, payload: unknown): void => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(channel, payload) }
   const service = new CheckinService(store, {
@@ -47,12 +98,19 @@ async function start(): Promise<void> {
   ipcMain.handle('accounts', () => service.accounts())
   ipcMain.handle('qr:start', (_e, platform: string) => service.startQrLogin(String(platform)))
   ipcMain.handle('qr:poll', (_e, id: string) => service.pollQrLogin(String(id)))
+  ipcMain.handle('web:login', async (_e, platformId: string) => {
+    const platform = getPlatform(String(platformId))
+    if (!platform.webLogin) return { state: 'error', message: '该平台不支持网页登录' }
+    const cookies = await openWebLogin(platform.id, platform.webLogin, mainWindow)
+    if (!cookies) return { state: 'expired', message: '登录窗口已关闭' }
+    return service.completeWebLogin(platform.id, cookies)
+  })
   ipcMain.handle('qr:cancel', (_e, id: string) => service.cancelQrLogin(String(id)))
   ipcMain.handle('account:update', (_e, input: unknown) => service.update(UpdateAccountSchema.parse(input)))
   ipcMain.handle('account:remove', (_e, id: string) => service.remove(String(id)))
   ipcMain.handle('account:run', (_e, id: string) => service.runNow(String(id)))
   ipcMain.handle('account:explain', (_e, id: string) => service.explainFailure(String(id)))
-  ipcMain.handle('settings', () => service.settings())
+  ipcMain.handle('settings', () => ({ ...service.settings(), keychainAvailable }))
   ipcMain.handle('settings:save', (_e, raw: { notifications?: boolean; autoLaunch?: boolean; ai?: Record<string, unknown> }) => {
     const ai = raw.ai ? { ...AIProviderConfigSchema.partial().parse(raw.ai), ...(typeof raw.ai.enabled === 'boolean' ? { enabled: raw.ai.enabled } : {}) } : undefined
     const result = service.saveSettings({ notifications: raw.notifications, autoLaunch: raw.autoLaunch, ai })

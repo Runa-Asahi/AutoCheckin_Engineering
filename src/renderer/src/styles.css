@@ -10,7 +10,7 @@ body { margin: 0; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", 
 .card { background: #fff; border-radius: 16px; padding: 20px 22px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
 .card-head { display: flex; align-items: center; gap: 12px; }
 .badge { width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; color: #fff; font-weight: 700; }
-.badge.netease { background: #e60026; } .badge.bilibili { background: #fb7299; }
+.badge.netease { background: #e60026; } .badge.bilibili { background: #fb7299; } .badge.tieba { background: #3388ff; } .badge.luogu { background: #2b6cb0; }
 .who { flex: 1; } .who strong { display: block; font-size: 16px; } .who span { color: #6b7280; font-size: 13px; }
 .row { display: flex; flex-wrap: wrap; gap: 18px 28px; margin: 16px 0 4px; }
 .task { display: flex; align-items: center; gap: 8px; min-width: 260px; }

@@ -17,14 +17,25 @@ export interface TaskContext {
  *
  * 约定：runTask 必须“执行后再查询确认”，只有平台状态接口确认完成才能返回 success/already。
  */
+/** 网页登录：打开平台官方登录页，用户自己登录（可过验证码），程序只截获登录完成后的 Cookie。 */
+export interface WebLogin {
+  url: string
+  /** 只读取这些域名下的 Cookie。 */
+  domains: string[]
+  /** 这些 Cookie 全部出现后视为登录完成。 */
+  requiredCookies: string[]
+}
+
 export interface Platform {
   id: string
   name: string
   loginHint: string
   tasks: PlatformTaskInfo[]
-  qrStart(session: HttpSession): Promise<QrTicket>
+  /** 二者择一：扫码登录（qrStart/qrPoll）或网页登录（webLogin）。 */
+  qrStart?(session: HttpSession): Promise<QrTicket>
   /** 成功时，session.cookies 中应已包含登录 Cookie。 */
-  qrPoll(session: HttpSession, key: string): Promise<QrResult>
+  qrPoll?(session: HttpSession, key: string): Promise<QrResult>
+  webLogin?: WebLogin
   /** 登录有效则返回用户资料，否则抛 LoginExpiredError。 */
   profile(session: HttpSession): Promise<Profile>
   /** 依次执行用户勾选的任务；实现内部可共享状态查询。 */

@@ -20,7 +20,18 @@ const aiPresets = computed(() => AI_PROVIDER_PRESETS)
 async function refresh(): Promise<void> { accounts.value = await window.api.accounts() }
 function openAdd(): void { adding.value = true; chosen.value = null; stopQr() }
 async function choose(p: PlatformInfo): Promise<void> {
-  chosen.value = p; qrExpired.value = false; qrImage.value = ''; qrMessage.value = '正在获取二维码…'
+  chosen.value = p; qrExpired.value = false; qrImage.value = ''
+  if (p.loginKind === 'web') {
+    qrMessage.value = `已打开${p.name}官方登录窗口，${p.loginHint.replace(/^在打开的.*?窗口里/, '请')}`
+    try {
+      const r = await window.api.webLogin(p.id)
+      qrMessage.value = r.message
+      if (r.state === 'success') { adding.value = false; ElMessage.success(r.message); await refresh() }
+      else qrExpired.value = true
+    } catch (error) { qrMessage.value = `登录失败：${(error as Error).message}`; qrExpired.value = true }
+    return
+  }
+  qrMessage.value = '正在获取二维码…'
   try {
     const start = await window.api.startQrLogin(p.id)
     qrSession.value = start.sessionId; qrImage.value = start.image; qrMessage.value = p.loginHint
@@ -77,7 +88,7 @@ onBeforeUnmount(() => { stopQr(); unsubscribe?.() })
 
     <section v-if="!accounts.length" class="empty">
       <h2>还没有账号</h2>
-      <p>点“添加账号”，用手机 App 扫一下二维码就好，不需要复制任何东西。</p>
+      <p>点“添加账号”，扫一下二维码或在官方登录窗口里登录就好，不需要复制任何东西。</p>
       <el-button type="primary" size="large" @click="openAdd">＋ 扫码添加账号</el-button>
     </section>
 
@@ -119,13 +130,14 @@ onBeforeUnmount(() => { stopQr(); unsubscribe?.() })
       <div v-else class="qr">
         <img v-if="qrImage && !qrExpired" :src="qrImage" alt="登录二维码" />
         <p>{{ qrMessage }}</p>
-        <el-button v-if="qrExpired" type="primary" @click="choose(chosen)">刷新二维码</el-button>
+        <el-button v-if="qrExpired" type="primary" @click="choose(chosen)">{{ chosen.loginKind === 'web' ? '重新打开登录窗口' : '刷新二维码' }}</el-button>
         <el-button text @click="stopQr(); chosen = null">换一个平台</el-button>
       </div>
     </el-dialog>
 
     <el-drawer v-model="settingsOpen" title="设置" size="420px">
       <template v-if="settings">
+        <el-alert v-if="settings.keychainAvailable === false" type="warning" :closable="false" show-icon style="margin-bottom: 12px" title="系统钥匙串不可用" description="登录信息已改用本机密钥文件加密（AES-256-GCM）。这比系统钥匙串弱：拿到你整个用户目录的人可以解密。建议安装并启用系统钥匙串（如 GNOME Keyring / KWallet）。" />
         <el-form label-position="top">
           <el-form-item><el-checkbox v-model="settings.notifications">签到完成后弹出系统通知</el-checkbox></el-form-item>
           <el-form-item><el-checkbox v-model="settings.autoLaunch">开机自动启动（在托盘里静默运行）</el-checkbox></el-form-item>
