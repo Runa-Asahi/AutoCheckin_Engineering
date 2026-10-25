@@ -1,6 +1,7 @@
 import { LoginExpiredError, NetworkError, type HttpSession } from '../http.js'
 import { result, type Platform, type TaskContext } from '../platform.js'
 import type { PlatformTaskInfo, TaskResult } from '../../../shared/types.js'
+import { ensureDevice } from './bilibiliDevice.js'
 
 const API = 'https://api.bilibili.com'
 const PASSPORT = 'https://passport.bilibili.com'
@@ -14,6 +15,11 @@ const MANGA: PlatformTaskInfo = { id: 'manga', label: '漫画签到', descriptio
 interface Resp<T = unknown> { code: number; message?: string; msg?: string; data?: T }
 interface Reward { login: boolean; watch: boolean; share: boolean; coins: number }
 interface Video { aid: number; bvid: string; cid: number; duration?: number; owner?: { mid: number } }
+
+/** 与网页端一致：Referer 指向被操作的视频页。 */
+function videoHeaders(v: Video): Record<string, string> {
+  return { Referer: `https://www.bilibili.com/video/${v.bvid}/?spm_id_from=333.1007.tianma.1-1-1.click`, Origin: 'https://www.bilibili.com' }
+}
 
 function reason(body: Resp): string { return body.message || body.msg || `错误码 ${body.code}` }
 function csrf(session: HttpSession): string { return session.cookies.bili_jct ?? '' }
@@ -65,7 +71,7 @@ export const bilibili: Platform = {
     if (code === 86038) return { state: 'expired', message: '二维码已过期，请刷新' }
     if (code === 0) {
       if (!session.cookies.SESSDATA || !session.cookies.bili_jct) return { state: 'error', message: '登录成功但没有拿到登录凭据，请重试' }
-      await ensureBuvid(session)
+      await ensureDevice(session)
       return { state: 'success', message: '登录成功' }
     }
     return { state: 'error', message: `登录失败：${body.data?.message ?? reason(body)}` }
@@ -79,7 +85,7 @@ export const bilibili: Platform = {
 
   async run(taskIds, ctx) {
     const me = await this.profile(ctx.session)
-    await ensureBuvid(ctx.session)
+    await ensureDevice(ctx.session)
     const out: TaskResult[] = []
     let state: Reward | undefined, stateError = ''
     try { state = await reward(ctx.session) } catch (error) { if (error instanceof LoginExpiredError) throw error; stateError = (error as Error).message }
@@ -89,11 +95,11 @@ export const bilibili: Platform = {
 
     if (taskIds.includes('watch')) out.push(await doTask(ctx, WATCH, state?.watch, (r) => r.watch, stateError, videoError, async () => {
       const v = list[0], played = Math.max(15, Math.min(v.duration ?? 60, 90)), now = Math.floor(ctx.now().getTime() / 1000)
-      return ctx.session.json<Resp>({ method: 'POST', url: `${API}/x/click-interface/web/heartbeat`, headers: HEADERS, form: { aid: v.aid, bvid: v.bvid, cid: v.cid ?? 0, mid: me.uid, csrf: csrf(ctx.session), played_time: played, real_played_time: played, realtime: played, start_ts: now - played, type: 3, dt: 2, play_type: 0 } })
+      return ctx.session.json<Resp>({ method: 'POST', url: `${API}/x/click-interface/web/heartbeat`, headers: videoHeaders(v), form: { aid: v.aid, bvid: v.bvid, cid: v.cid ?? 0, mid: me.uid, csrf: csrf(ctx.session), played_time: played, real_played_time: played, realtime: played, start_ts: now - played, type: 3, dt: 2, play_type: 0 } })
     }))
     if (taskIds.includes('share')) out.push(await doTask(ctx, SHARE, state?.share, (r) => r.share, stateError, videoError, async () => {
       const v = list[0]
-      const body = await ctx.session.json<Resp>({ method: 'POST', url: `${API}/x/web-interface/share/add`, headers: HEADERS, form: { aid: v.aid, bvid: v.bvid, csrf: csrf(ctx.session), eab_x: 2, ramval: 0, source: 'web_normal', ga: 1 } })
+      const body = await ctx.session.json<Resp>({ method: 'POST', url: `${API}/x/web-interface/share/add`, headers: videoHeaders(v), form: { aid: v.aid, csrf: csrf(ctx.session), eab_x: 1, ramval: 3 + Math.floor(Math.random() * 17), source: 'web_normal', ga: 1 } })
       return body.code === 71000 ? { code: 0 } : body
     }))
     if (taskIds.includes('coin')) {
@@ -101,7 +107,7 @@ export const bilibili: Platform = {
       out.push(await doTask(ctx, COIN, state ? before >= 10 : undefined, (r) => r.coins > before, stateError, videoError, async () => {
         let last: Resp = { code: -1, message: '没有可投币的视频' }
         for (const v of list.slice(0, 5)) {
-          last = await ctx.session.json<Resp>({ method: 'POST', url: `${API}/x/web-interface/coin/add`, headers: HEADERS, form: { aid: v.aid, multiply: 1, select_like: 0, cross_domain: 'true', csrf: csrf(ctx.session) } })
+          last = await ctx.session.json<Resp>({ method: 'POST', url: `${API}/x/web-interface/coin/add`, headers: videoHeaders(v), form: { aid: v.aid, multiply: 1, select_like: 0, cross_domain: 'true', csrf: csrf(ctx.session), eab_x: 2, ramval: 3, source: 'web_normal', ga: 1 } })
           if (last.code === 34005) continue // 该视频已投满
           return last.code === -104 ? { code: -104, message: '硬币不足' } : last
         }
@@ -119,7 +125,10 @@ async function doTask(ctx: TaskContext, task: PlatformTaskInfo, alreadyDone: boo
   let body: Resp
   try { body = await action() } catch (error) { return result(task, 'failed', `请求失败：${(error as Error).message}`) }
   if (body.code === -101) throw new LoginExpiredError('B 站登录已过期，请重新扫码')
-  if (body.code !== 0) return result(task, 'failed', `B 站返回：${reason(body)}`)
+  if (body.code !== 0) {
+    const risk = body.code === -403 || /账号异常|非法访问/.test(reason(body))
+    return result(task, 'failed', `B 站返回：${reason(body)}${risk ? '（B 站风控拦截。已为本账号激活设备指纹，档案生效可能需要一段时间，稍后会自动重试）' : ''}`)
+  }
   const verified = await confirm(ctx, check)
   if (verified.ok) return result(task, 'success', '已完成，B 站任务状态已确认')
   return result(task, 'failed', `请求已发送，但 B 站任务状态未显示完成${verified.error || stateError ? `（${verified.error || stateError}）` : ''}`)
@@ -138,14 +147,4 @@ async function manga(ctx: TaskContext): Promise<TaskResult> {
     if (await status()) return result(MANGA, 'success', '签到成功，状态已确认')
     return result(MANGA, 'failed', `签到后状态仍为未签到（平台返回：${reason(body)}）`)
   } catch (error) { return result(MANGA, 'failed', (error as Error).message) }
-}
-
-/** 获取设备标识 buvid3/buvid4，降低风控（412）概率。 */
-async function ensureBuvid(session: HttpSession): Promise<void> {
-  if (session.cookies.buvid3) return
-  try {
-    const body = await session.json<Resp<{ b_3?: string; b_4?: string }>>({ url: `${API}/x/frontend/finger/spi`, headers: HEADERS })
-    if (body.data?.b_3) session.cookies.buvid3 = body.data.b_3
-    if (body.data?.b_4) session.cookies.buvid4 = body.data.b_4
-  } catch { /* 非必须 */ }
 }

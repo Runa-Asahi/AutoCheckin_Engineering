@@ -21,20 +21,28 @@ export async function weapiCall<T extends Coded>(session: HttpSession, path: str
 }
 
 const EAPI_ORIGIN = 'https://interface.music.163.com'
-const CLIENT_UA = 'NeteaseMusic 9.0.90/5038 (iPhone; iOS 16.2; zh_CN)'
 
-/** 客户端（eapi）调用：与 NeteaseCloudMusicApi 默认方式一致，Cookie 由设备头 + MUSIC_U 组成。 */
-export async function eapiCall<T extends Coded>(session: HttpSession, uri: string, data: Record<string, unknown> = {}): Promise<T> {
+/** 客户端设备档案，取值与 NeteaseCloudMusicApi util/request.js 的 osMap / userAgentMap 一致。 */
+const DEVICES = {
+  /** alpha.1 实测可用的组合（PC 设备头 + iPhone UA，同 NeteaseCloudMusicApi 默认）：扫码登录与电脑端签到均已验证，保持不变。 */
+  default: { os: 'pc', appver: '3.1.17.204416', osver: 'Microsoft-Windows-10-Professional-build-19045-64bit', channel: 'netease', mobilename: '', resolution: '1920x1080', ua: 'NeteaseMusic 9.0.90/5038 (iPhone; iOS 16.2; zh_CN)' },
+  android: { os: 'android', appver: '8.20.20.231215173437', osver: '14', channel: 'xiaomi', mobilename: '23013RK75C', resolution: '1080x2400', ua: 'NeteaseMusic/9.1.65.240927161425(9001065);Dalvik/2.1.0 (Linux; U; Android 14; 23013RK75C Build/UKQ1.230804.001)' },
+} as const
+export type NeteaseDevice = keyof typeof DEVICES
+
+/** 客户端（eapi）调用：Cookie 由设备头 + MUSIC_U 组成；device 决定模拟电脑客户端还是安卓 App。 */
+export async function eapiCall<T extends Coded>(session: HttpSession, uri: string, data: Record<string, unknown> = {}, device: NeteaseDevice = 'default'): Promise<T> {
   if (!session.cookies.deviceId) session.cookies.deviceId = randomBytes(26).toString('hex').toUpperCase().slice(0, 52)
+  const profile = DEVICES[device]
   const header: Record<string, string> = {
-    osver: 'Microsoft-Windows-10-Professional-build-19045-64bit', deviceId: session.cookies.deviceId, os: 'pc', appver: '3.1.17.204416',
-    versioncode: '140', mobilename: '', buildver: String(Math.floor(Date.now() / 1000)), resolution: '1920x1080',
-    __csrf: session.cookies.__csrf ?? '', channel: 'netease', requestId: `${Date.now()}_${String(Math.floor(Math.random() * 1000)).padStart(4, '0')}`,
+    osver: profile.osver, deviceId: session.cookies.deviceId, os: profile.os, appver: profile.appver,
+    versioncode: '140', mobilename: profile.mobilename, buildver: String(Math.floor(Date.now() / 1000)), resolution: profile.resolution,
+    __csrf: session.cookies.__csrf ?? '', channel: profile.channel, requestId: `${Date.now()}_${String(Math.floor(Math.random() * 1000)).padStart(4, '0')}`,
   }
   if (session.cookies.MUSIC_U) header.MUSIC_U = session.cookies.MUSIC_U
   const cookie = Object.entries(header).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('; ')
   const body = eapi(uri, { ...data, e_r: false, header })
-  return session.json<T>({ method: 'POST', url: `${EAPI_ORIGIN}/eapi/${uri.replace(/^\/api\//, '')}`, form: body, headers: { Cookie: cookie, 'User-Agent': CLIENT_UA }, rawCookie: true })
+  return session.json<T>({ method: 'POST', url: `${EAPI_ORIGIN}/eapi/${uri.replace(/^\/api\//, '')}`, form: body, headers: { Cookie: cookie, 'User-Agent': profile.ua }, rawCookie: true })
 }
 
 function reason(body: Coded): string { return body.msg ?? body.message ?? `错误码 ${body.code}` }
@@ -55,13 +63,13 @@ export const netease: Platform = {
   tasks: [MOBILE, PC],
 
   async qrStart(session) {
-    const body = await eapiCall<Coded & { unikey?: string }>(session, '/api/login/qrcode/unikey', { type: 3 })
+    const body = await eapiCall<Coded & { unikey?: string }>(session, '/api/login/qrcode/unikey', { type: 3 }, 'default')
     if (body.code !== 200 || !body.unikey) throw new NetworkError(`获取二维码失败：${reason(body)}`)
     return { key: body.unikey, content: `https://music.163.com/login?codekey=${body.unikey}` }
   },
 
   async qrPoll(session, key) {
-    const body = await eapiCall<Coded & { nickname?: string }>(session, '/api/login/qrcode/client/login', { key, type: 3 })
+    const body = await eapiCall<Coded & { nickname?: string }>(session, '/api/login/qrcode/client/login', { key, type: 3 }, 'default')
     if (body.code === 801) return { state: 'waiting', message: '请用网易云音乐 App 扫码' }
     if (body.code === 802) return { state: 'scanned', message: `已扫码${body.nickname ? `（${body.nickname}）` : ''}，请在手机上确认登录` }
     if (body.code === 800) return { state: 'expired', message: '二维码已过期，请刷新' }
@@ -92,26 +100,50 @@ export const netease: Platform = {
   },
 }
 
-async function signOnce(ctx: TaskContext, task: PlatformTaskInfo, type: 0 | 1, flag: keyof SignStatus, alreadyBefore: boolean | undefined): Promise<TaskResult> {
-  if (alreadyBefore === true) return result(task, 'already', '今天已经签过了')
-  let response: Coded & { point?: number }
-  try { response = await eapiCall(ctx.session, '/api/point/dailyTask', { type }) } catch (error) {
-    return result(task, 'failed', `签到请求失败：${(error as Error).message}`)
-  }
-  if (response.code === 301) throw new LoginExpiredError('网易云音乐登录已过期，请重新扫码')
-  // 不论接口返回什么，都以状态接口为准，避免“接口说成功但实际没签上”
-  let after: SignStatus | undefined, verifyError = ''
+interface Attempt { name: string; send: () => Promise<Coded & { point?: number; data?: { point?: number } }> }
+
+/**
+ * 手机端：先以安卓 App 身份调用 dailyTask(type=0)；若状态仍未签到，再调用 App 内“云贝签到”接口
+ * （NeteaseCloudMusicApi yunbei_sign：/api/pointmall/user/sign）。电脑端：以 PC 客户端身份 dailyTask(type=1)。
+ * 每一步之后都查询状态，只认状态接口。
+ */
+function attemptsFor(ctx: TaskContext, type: 0 | 1): Attempt[] {
+  if (type === 1) return [{ name: 'PC 客户端签到', send: () => eapiCall(ctx.session, '/api/point/dailyTask', { type: 1 }, 'default') }]
+  return [
+    { name: '安卓 App 签到', send: () => eapiCall(ctx.session, '/api/point/dailyTask', { type: 0 }, 'android') },
+    { name: 'App 云贝签到', send: () => weapiCall(ctx.session, 'pointmall/user/sign') },
+  ]
+}
+
+async function verify(ctx: TaskContext, flag: keyof SignStatus): Promise<{ ok: boolean; error: string }> {
+  let error = ''
   for (let i = 0; i < 3; i++) {
-    try { after = await signStatus(ctx.session); if (after[flag]) break } catch (error) {
-      if (error instanceof LoginExpiredError) throw error
-      verifyError = (error as Error).message
+    try { if ((await signStatus(ctx.session))[flag]) return { ok: true, error: '' } } catch (caught) {
+      if (caught instanceof LoginExpiredError) throw caught
+      error = (caught as Error).message
     }
     await ctx.sleep(1500)
   }
-  if (after?.[flag]) {
-    if (response.code === 200) return result(task, 'success', response.point ? `签到成功，获得 ${response.point} 积分` : '签到成功')
-    return result(task, 'already', '今天已经签过了')
+  return { ok: false, error }
+}
+
+async function signOnce(ctx: TaskContext, task: PlatformTaskInfo, type: 0 | 1, flag: keyof SignStatus, alreadyBefore: boolean | undefined): Promise<TaskResult> {
+  if (alreadyBefore === true) return result(task, 'already', '今天已经签过了')
+  const notes: string[] = []
+  let anySent = false
+  for (const attempt of attemptsFor(ctx, type)) {
+    let response: Coded & { point?: number; data?: { point?: number } }
+    try { response = await attempt.send() } catch (error) { notes.push(`${attempt.name}：请求失败（${(error as Error).message}）`); continue }
+    anySent = true
+    if (response.code === 301) throw new LoginExpiredError('网易云音乐登录已过期，请重新扫码')
+    // 不论接口返回什么，都以状态接口为准，避免“接口说成功但实际没签上”
+    const checked = await verify(ctx, flag)
+    if (checked.ok) {
+      const point = response.point ?? response.data?.point
+      if (response.code === 200) return result(task, 'success', point ? `签到成功，获得 ${point} 积分` : '签到成功')
+      return result(task, 'already', '今天已经签过了')
+    }
+    notes.push(`${attempt.name}：${response.code === 200 ? '接口返回成功，但平台状态显示仍未签到' : `平台返回 ${reason(response)}`}${checked.error ? `（确认失败：${checked.error}）` : ''}`)
   }
-  const said = response.code === 200 ? '接口返回成功，但平台状态显示仍未签到' : `平台返回：${reason(response)}`
-  return result(task, 'failed', `${said}${verifyError ? `（确认失败：${verifyError}）` : ''}`)
+  return result(task, 'failed', anySent ? notes.join('；') : notes.join('；') || '签到请求失败')
 }

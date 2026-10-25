@@ -109,3 +109,47 @@ describe('网易云音乐扫码登录', () => {
     expect((await service.pollQrLogin(start.sessionId)).state).toBe('expired')
   })
 })
+
+describe('网易云手机端签到：模拟安卓 App，并回退云贝签到', () => {
+  it('安卓身份签到后状态仍未签 → 回退云贝签到 → 状态确认 → 成功', async () => {
+    const { store, id } = setup()
+    const seen: Array<{ cookie: string; ua: string }> = []
+    nock(WEB).post('/weapi/nuser/account/get').query(true).reply(200, account)
+      .post('/weapi/v1/user/info').query(true).times(4).reply(200, { code: 200, mobileSign: false, pcSign: true })
+      .post('/weapi/pointmall/user/sign').query(true).reply(200, { code: 200, data: { point: 5 } })
+      .post('/weapi/v1/user/info').query(true).reply(200, { code: 200, mobileSign: true, pcSign: true })
+    nock(APP).post('/eapi/point/dailyTask').reply(function () {
+      seen.push({ cookie: String(this.req.headers.cookie), ua: String(this.req.headers['user-agent']) }); return [200, { code: 200, point: 3 }]
+    })
+    const run = await runAccount(id, 'manual', { store, sleep: noSleep })
+    expect(seen[0].cookie).toContain('os=android')
+    expect(seen[0].cookie).toContain('channel=xiaomi')
+    expect(seen[0].cookie).toContain('MUSIC_U=secret-music-u')
+    expect(seen[0].ua).toContain('Android')
+    expect(run.results[0]).toMatchObject({ status: 'success', message: '签到成功，获得 5 积分' })
+  })
+
+  it('两种方式都没让状态变成已签 → 失败，并分别说明', async () => {
+    const { store, id } = setup()
+    nock(WEB).post('/weapi/nuser/account/get').query(true).reply(200, account)
+      .post('/weapi/v1/user/info').query(true).times(7).reply(200, { code: 200, mobileSign: false, pcSign: false })
+      .post('/weapi/pointmall/user/sign').query(true).reply(200, { code: 400, msg: '参数错误' })
+    nock(APP).post('/eapi/point/dailyTask').reply(200, { code: 200 })
+    const run = await runAccount(id, 'manual', { store, sleep: noSleep })
+    expect(run.results[0].status).toBe('failed')
+    expect(run.results[0].message).toContain('安卓 App 签到：接口返回成功，但平台状态显示仍未签到')
+    expect(run.results[0].message).toContain('App 云贝签到：平台返回 参数错误')
+  })
+
+  it('电脑端签到保持 alpha.1 已验证的请求方式（PC 设备头）', async () => {
+    const { store, id } = setup({ mobile_sign: false, pc_sign: true })
+    let cookie = ''
+    nock(WEB).post('/weapi/nuser/account/get').query(true).reply(200, account)
+      .post('/weapi/v1/user/info').query(true).reply(200, { code: 200, mobileSign: false, pcSign: false })
+      .post('/weapi/v1/user/info').query(true).reply(200, { code: 200, mobileSign: false, pcSign: true })
+    nock(APP).post('/eapi/point/dailyTask').reply(function () { cookie = String(this.req.headers.cookie); return [200, { code: 200, point: 8 }] })
+    const run = await runAccount(id, 'manual', { store, sleep: noSleep })
+    expect(cookie).toContain('os=pc')
+    expect(run.results[0]).toMatchObject({ status: 'success', message: '签到成功，获得 8 积分' })
+  })
+})
