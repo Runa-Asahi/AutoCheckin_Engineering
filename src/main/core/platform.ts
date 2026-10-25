@@ -38,6 +38,10 @@ export interface Platform {
   /** 成功时，session.cookies 中应已包含登录 Cookie。 */
   qrPoll?(session: HttpSession, key: string): Promise<QrResult>
   webLogin?: WebLogin
+  /** 官方 App 名称 */
+  appName?: string
+  /** 把二维码内容包装成可直接唤起官方 App 打开的链接（手机端用） */
+  appLink?(qrContent: string): string
   /** 手机上无法扫自己屏幕上的码，用这个官方网页登录代替扫码。 */
   mobileLogin?: WebLogin
   /** 登录有效则返回用户资料，否则抛 LoginExpiredError。 */

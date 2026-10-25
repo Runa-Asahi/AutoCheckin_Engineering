@@ -33,7 +33,13 @@ export class CheckinService {
     const platform = getPlatform(platformId)
     return this.hooks.mobile ? (platform.mobileLogin ?? platform.webLogin) : platform.webLogin
   }
-  platforms(): PlatformInfo[] { return PLATFORMS.map(({ id, name, loginHint, tasks }) => ({ id, name, loginHint, tasks, loginKind: this.loginFor(id) ? 'web' : 'qr' })) }
+  platforms(): PlatformInfo[] {
+    return PLATFORMS.map((p) => {
+      // 手机端优先扫码（配合“在 App 中打开”/“保存到相册”），网页登录作为备选
+      const loginKind = this.hooks.mobile ? (p.qrStart ? 'qr' : 'web') : (p.webLogin ? 'web' : 'qr')
+      return { id: p.id, name: p.name, loginHint: p.loginHint, tasks: p.tasks, loginKind, appName: p.appName, webFallback: Boolean(this.hooks.mobile && p.qrStart && this.loginFor(p.id)) }
+    })
+  }
   accounts(): AccountView[] { return this.store.accounts().map((account) => this.view(account)) }
 
   async startQrLogin(platformId: string): Promise<QrStart> {
@@ -42,7 +48,8 @@ export class CheckinService {
     const ticket = await platform.qrStart(http)
     const sessionId = uuid()
     this.qr.set(sessionId, { platform: platformId, key: ticket.key, http, createdAt: Date.now() })
-    return { sessionId, image: await QRCode.toDataURL(ticket.content, { width: 240, margin: 1 }) }
+    const image = await QRCode.toDataURL(ticket.content, { width: this.hooks.mobile ? 600 : 240, margin: this.hooks.mobile ? 3 : 1 })
+    return { sessionId, image, content: ticket.content, appLink: platform.appLink?.(ticket.content) }
   }
 
   async pollQrLogin(sessionId: string): Promise<QrPoll> {

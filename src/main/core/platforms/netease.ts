@@ -60,6 +60,9 @@ export const netease: Platform = {
   id: 'netease',
   name: '网易云音乐',
   loginHint: '打开网易云音乐 App，点左上角菜单 → 扫一扫',
+  appName: '网易云音乐',
+  // orpheus://openurl?url= 在网易云 App 内置浏览器打开链接
+  appLink: (content) => `orpheus://openurl?url=${encodeURIComponent(content)}`,
   mobileLogin: { url: 'https://y.music.163.com/m/login', domains: ['163.com', '126.net'], requiredCookies: ['MUSIC_U'], cookieUrls: ['https://music.163.com/'] },
   tasks: [MOBILE, PC],
 

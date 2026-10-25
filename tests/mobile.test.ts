@@ -41,11 +41,25 @@ describe('可替换传输层', () => {
 })
 
 describe('手机端登录方式', () => {
-  it('手机上所有平台都使用官方网页登录', () => {
+  it('手机上 B 站/网易云扫码为主（可改网页登录），贴吧/洛谷用官方网页登录', () => {
     const service = new CheckinService(tempStore().store, { mobile: true })
-    expect(service.platforms().every((p) => p.loginKind === 'web')).toBe(true)
+    const kinds = Object.fromEntries(service.platforms().map((p) => [p.id, [p.loginKind, p.webFallback]]))
+    expect(kinds).toEqual({ netease: ['qr', true], bilibili: ['qr', true], tieba: ['web', false], luogu: ['web', false] })
     expect(service.loginFor('bilibili')?.requiredCookies).toContain('SESSDATA')
     const desktop = new CheckinService(tempStore().store)
     expect(desktop.platforms().find((p) => p.id === 'netease')?.loginKind).toBe('qr')
+  })
+})
+
+describe('用官方 App 打开扫码确认页', () => {
+  it('B 站 / 网易云生成正确的 App 链接，且原始链接可完整还原', async () => {
+    const { getPlatform } = await import('../src/main/core/platforms/index.js')
+    const content = 'https://passport.bilibili.com/h5-app/passport/login/scan?navhide=1&qrcode_key=abc&from=x'
+    const bili = getPlatform('bilibili').appLink!(content)
+    expect(bili.startsWith('bilibili://browser?url=')).toBe(true)
+    expect(decodeURIComponent(new URL(bili).searchParams.get('url')!)).toBe(content)
+    const ne = getPlatform('netease').appLink!('https://music.163.com/login?codekey=k1')
+    expect(ne).toBe('orpheus://openurl?url=https%3A%2F%2Fmusic.163.com%2Flogin%3Fcodekey%3Dk1')
+    expect(getPlatform('tieba').appLink).toBeUndefined()
   })
 })

@@ -44,6 +44,7 @@ export const tieba: Platform = {
   name: '百度贴吧',
   loginHint: '在打开的百度官方登录窗口里登录（可扫码或输入账号，验证码请自己完成）',
   tasks: [SIGN_ALL],
+  appName: '百度贴吧',
   webLogin: { url: 'https://passport.baidu.com/v2/?login&u=https%3A%2F%2Ftieba.baidu.com%2F', domains: ['baidu.com'], requiredCookies: ['BDUSS', 'STOKEN'], cookieUrls: ['https://passport.baidu.com/', 'https://tieba.baidu.com/'] },
 
   async profile(session) {

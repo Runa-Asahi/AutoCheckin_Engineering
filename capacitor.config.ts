@@ -10,6 +10,8 @@ const config: CapacitorConfig = {
     CapacitorHttp: { enabled: true },
     // 不让 WebView 与原生共享 Cookie：登录信息只在加密存储里
     CapacitorCookies: { enabled: false },
+    // 页面铺满屏幕，用 --safe-area-inset-* 变量避开状态栏/手势条
+    SystemBars: { insetsHandling: 'css', initialViewportFitValueHint: 'cover' },
   },
 }
 export default config

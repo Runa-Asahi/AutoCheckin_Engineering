@@ -5,7 +5,13 @@ export type TaskStatus = 'success' | 'already' | 'failed' | 'login_expired' | 's
 export interface TaskResult { taskId: string; label: string; status: TaskStatus; message: string }
 
 export interface PlatformTaskInfo { id: string; label: string; description: string; defaultOn: boolean }
-export interface PlatformInfo { id: string; name: string; loginHint: string; loginKind: 'qr' | 'web'; tasks: PlatformTaskInfo[] }
+export interface PlatformInfo {
+  id: string; name: string; loginHint: string; loginKind: 'qr' | 'web'; tasks: PlatformTaskInfo[]
+  /** 官方 App 名称（手机端“在 App 中打开 / 从相册扫码”的文案用） */
+  appName?: string
+  /** 手机端：扫码之外还可改用官方网页登录 */
+  webFallback?: boolean
+}
 
 export interface RunRecord { at: string; date: string; trigger: 'manual' | 'schedule'; results: TaskResult[]; attempt: number }
 
@@ -25,7 +31,13 @@ export interface AccountView {
 }
 
 export type QrState = 'waiting' | 'scanned' | 'expired' | 'success' | 'error'
-export interface QrStart { sessionId: string; image: string }
+export interface QrStart {
+  sessionId: string; image: string
+  /** 二维码里的原始链接 */
+  content?: string
+  /** 用官方 App 直接打开确认页的链接（尽力而为，可能不被 App 支持） */
+  appLink?: string
+}
 export interface QrPoll { state: QrState; message: string; account?: AccountView }
 
 export interface AISettingsView { enabled: boolean; provider: AIProviderConfig['provider']; baseUrl: string; model: string; hasKey: boolean }
@@ -47,4 +59,8 @@ export interface AutoCheckinApi {
   explainFailure(id: string): Promise<string>
   onAccountsChanged(callback: (accounts: AccountView[]) => void): () => void
   openExternal(url: string): Promise<void>
+  /** 仅手机端：用官方 App 打开链接，false 表示没装 */
+  openApp?(url: string): Promise<boolean>
+  /** 仅手机端：把 data:image/png 保存到相册 */
+  saveImage?(dataUrl: string, fileName: string): Promise<{ saved: boolean; reason?: string }>
 }

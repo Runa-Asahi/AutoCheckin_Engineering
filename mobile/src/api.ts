@@ -7,6 +7,7 @@ import type { AccountView, AutoCheckinApi } from '../../src/shared/types'
 import { nativeTransport } from './nativeTransport'
 import { fieldCipher, keystorePersistence } from './secure'
 import { WebLogin } from './webLogin'
+import { AppBridge } from './appBridge'
 
 const REMINDER_BASE = 1000
 let notifySeq = 1
@@ -69,5 +70,7 @@ export async function createMobileApi(): Promise<AutoCheckinApi> {
     explainFailure: (id) => service.explainFailure(id),
     onAccountsChanged: (callback) => { listeners.add(callback); return () => listeners.delete(callback) },
     openExternal: async (url) => { if (/^https:\/\//.test(url)) window.open(url, '_blank') },
+    openApp: async (url) => (await AppBridge.openApp({ url })).opened,
+    saveImage: async (dataUrl, fileName) => AppBridge.saveImage({ base64: dataUrl.replace(/^data:image\/\w+;base64,/, ''), fileName }),
   }
 }

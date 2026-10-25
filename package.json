@@ -27,7 +27,8 @@
     "package": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder --publish never",
     "typecheck:mobile": "vue-tsc --noEmit -p tsconfig.mobile.json",
-    "build:mobile": "npm run typecheck:mobile && vite build -c vite.mobile.config.ts && cap sync android"
+    "build:mobile": "npm run typecheck:mobile && vite build -c vite.mobile.config.ts && cap sync android",
+    "screens:mobile": "node scripts/mobile-screens.mjs screens"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",

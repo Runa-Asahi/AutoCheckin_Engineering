@@ -33,6 +33,7 @@ export const luogu: Platform = {
   name: '洛谷',
   loginHint: '在打开的洛谷官方登录窗口里登录（验证码请自己完成）',
   tasks: [PUNCH],
+  appName: '洛谷',
   webLogin: { url: `${ORIGIN}/auth/login`, domains: ['luogu.com.cn'], requiredCookies: ['__client_id', '_uid'], cookieUrls: [`${ORIGIN}/`] },
 
   async profile(session) {
