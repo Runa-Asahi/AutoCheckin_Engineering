@@ -2,7 +2,7 @@ import { LoginExpiredError, NetworkError, type HttpSession } from '../http.js'
 import { result, type Platform, type TaskContext } from '../platform.js'
 import type { PlatformTaskInfo, TaskResult } from '../../../shared/types.js'
 import { eapi, weapi } from './neteaseCrypto.js'
-import { randomBytes } from 'node:crypto'
+import { randomHex } from '../portable.js'
 
 const ORIGIN = 'https://music.163.com'
 const HEADERS = { Referer: 'https://music.163.com/', Origin: 'https://music.163.com' }
@@ -32,7 +32,7 @@ export type NeteaseDevice = keyof typeof DEVICES
 
 /** 客户端（eapi）调用：Cookie 由设备头 + MUSIC_U 组成；device 决定模拟电脑客户端还是安卓 App。 */
 export async function eapiCall<T extends Coded>(session: HttpSession, uri: string, data: Record<string, unknown> = {}, device: NeteaseDevice = 'default'): Promise<T> {
-  if (!session.cookies.deviceId) session.cookies.deviceId = randomBytes(26).toString('hex').toUpperCase().slice(0, 52)
+  if (!session.cookies.deviceId) session.cookies.deviceId = randomHex(52).toUpperCase()
   const profile = DEVICES[device]
   const header: Record<string, string> = {
     osver: profile.osver, deviceId: session.cookies.deviceId, os: profile.os, appver: profile.appver,
@@ -60,6 +60,7 @@ export const netease: Platform = {
   id: 'netease',
   name: '网易云音乐',
   loginHint: '打开网易云音乐 App，点左上角菜单 → 扫一扫',
+  mobileLogin: { url: 'https://y.music.163.com/m/login', domains: ['163.com', '126.net'], requiredCookies: ['MUSIC_U'], cookieUrls: ['https://music.163.com/'] },
   tasks: [MOBILE, PC],
 
   async qrStart(session) {

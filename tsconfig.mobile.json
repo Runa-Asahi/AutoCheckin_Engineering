@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.web.json",
+  "compilerOptions": { "composite": false, "noEmit": true },
+  "include": ["mobile/src/**/*.ts", "src/renderer/src/**/*.ts", "src/renderer/src/**/*.vue", "src/shared/**/*.ts", "src/main/core/**/*.ts", "capacitor.config.ts"],
+  "exclude": ["src/main/core/filePersistence.ts", "src/main/core/localCipher.ts"]
+}

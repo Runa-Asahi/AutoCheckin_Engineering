@@ -1,0 +1,58 @@
+name: Android
+
+on:
+  push:
+    branches-ignore: [main]
+    paths: ["mobile/**", "android/**", "src/main/core/**", "src/renderer/**", "src/shared/**", "capacitor.config.ts", "vite.mobile.config.ts", "package.json", "pnpm-lock.yaml", ".github/workflows/android.yml"]
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build:mobile
+      - name: 还原签名密钥（来自 GitHub Secrets，不在仓库中）
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_B64" ]; then echo "::error::缺少 ANDROID_KEYSTORE_B64 secret"; exit 1; fi
+          echo "$ANDROID_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+      - name: 构建并签名 APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon assembleRelease
+      - name: 校验签名
+        run: |
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs android/app/build/outputs/apk/release/app-release.apk
+          VERSION=$(node -p "require('./package.json').version")
+          mkdir -p apk && cp android/app/build/outputs/apk/release/app-release.apk "apk/AutoCheckin-${VERSION}-android.apk"
+          (cd apk && sha256sum *.apk > SHA256SUMS-android.txt && cat SHA256SUMS-android.txt)
+      - name: 删除临时密钥
+        if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AutoCheckin-android
+          path: apk/*
+          if-no-files-found: error

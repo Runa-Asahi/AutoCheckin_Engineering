@@ -29,7 +29,7 @@ export interface QrStart { sessionId: string; image: string }
 export interface QrPoll { state: QrState; message: string; account?: AccountView }
 
 export interface AISettingsView { enabled: boolean; provider: AIProviderConfig['provider']; baseUrl: string; model: string; hasKey: boolean }
-export interface AppSettingsView { notifications: boolean; autoLaunch: boolean; ai: AISettingsView; /** false 表示系统钥匙串不可用，已改用本地密钥加密 */ keychainAvailable?: boolean }
+export interface AppSettingsView { notifications: boolean; autoLaunch: boolean; ai: AISettingsView; /** false 表示系统钥匙串不可用，已改用本地密钥加密 */ keychainAvailable?: boolean; /** 运行在手机 App 中 */ mobile?: boolean }
 
 export interface AutoCheckinApi {
   platforms(): Promise<PlatformInfo[]>

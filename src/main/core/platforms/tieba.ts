@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { md5Hex } from './neteaseCrypto.js'
 import { LoginExpiredError, NetworkError, type HttpSession } from '../http.js'
 import { result, type Platform, type TaskContext } from '../platform.js'
 import type { PlatformTaskInfo, TaskResult } from '../../../shared/types.js'
@@ -17,7 +17,7 @@ interface ClientSign { error_code?: string | number; error_msg?: string }
 /** 贴吧客户端签名：参数按键名排序拼成 k=v 串，加 "tiebaclient!!!" 后取 MD5 大写（与贴吧客户端一致）。 */
 export function clientSign(params: Record<string, string>): string {
   const base = Object.keys(params).sort().map((key) => `${key}=${params[key]}`).join('')
-  return createHash('md5').update(`${base}tiebaclient!!!`, 'utf8').digest('hex').toUpperCase()
+  return md5Hex(`${base}tiebaclient!!!`).toUpperCase()
 }
 
 async function tbs(session: HttpSession): Promise<string> {
@@ -44,7 +44,7 @@ export const tieba: Platform = {
   name: '百度贴吧',
   loginHint: '在打开的百度官方登录窗口里登录（可扫码或输入账号，验证码请自己完成）',
   tasks: [SIGN_ALL],
-  webLogin: { url: 'https://passport.baidu.com/v2/?login&u=https%3A%2F%2Ftieba.baidu.com%2F', domains: ['baidu.com'], requiredCookies: ['BDUSS', 'STOKEN'] },
+  webLogin: { url: 'https://passport.baidu.com/v2/?login&u=https%3A%2F%2Ftieba.baidu.com%2F', domains: ['baidu.com'], requiredCookies: ['BDUSS', 'STOKEN'], cookieUrls: ['https://passport.baidu.com/', 'https://tieba.baidu.com/'] },
 
   async profile(session) {
     await tbs(session)

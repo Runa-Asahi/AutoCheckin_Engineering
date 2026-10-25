@@ -25,19 +25,29 @@
     "test:e2e": "playwright test",
     "lint": "eslint .",
     "package": "npm run build && electron-builder --dir",
-    "dist": "npm run build && electron-builder --publish never"
+    "dist": "npm run build && electron-builder --publish never",
+    "typecheck:mobile": "vue-tsc --noEmit -p tsconfig.mobile.json",
+    "build:mobile": "npm run typecheck:mobile && vite build -c vite.mobile.config.ts && cap sync android"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
     "axios": "^1.11.0",
+    "crypto-js": "^4.2.0",
     "element-plus": "^2.10.7",
     "qrcode": "^1.5.4",
     "vue": "^3.5.18",
     "zod": "^4.0.17"
   },
   "devDependencies": {
+    "@aparajita/capacitor-secure-storage": "8.0.1",
+    "@capacitor/android": "8.5.3",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/cli": "8.5.3",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/local-notifications": "8.3.1",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.54.2",
+    "@types/crypto-js": "^4.2.2",
     "@types/node": "^22.17.1",
     "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-vue": "^6.0.1",

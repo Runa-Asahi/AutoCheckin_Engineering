@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { HttpSession, isAllowedUrl } from '../src/main/core/http.js'
 import { createLocalKeyCipher } from '../src/main/core/localCipher.js'
 import { Store } from '../src/main/core/store.js'
+import { filePersistence } from '../src/main/core/filePersistence.js'
 
 beforeAll(() => nock.disableNetConnect())
 afterEach(() => nock.cleanAll())
@@ -40,7 +41,7 @@ describe('本地密钥加密兜底', () => {
   })
   it('数据文件里没有明文 Cookie', () => {
     const dir = mkdtempSync(join(tmpdir(), 'ac-store-'))
-    const store = new Store(join(dir, 'data.json'), createLocalKeyCipher(join(dir, 'local.key')))
+    const store = new Store(filePersistence(join(dir, 'data.json')), createLocalKeyCipher(join(dir, 'local.key')))
     store.upsertAccount({ platform: 'bilibili', uid: '1', nickname: 'n', cookies: { SESSDATA: 'plain-secret' }, tasks: {} })
     expect(readFileSync(join(dir, 'data.json'), 'utf8')).not.toContain('plain-secret')
   })

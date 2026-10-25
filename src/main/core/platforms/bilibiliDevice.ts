@@ -1,4 +1,4 @@
-import { randomBytes, randomInt } from 'node:crypto'
+import { randomHex, randomBytesArray, randomInt, toBase64 } from '../portable.js'
 import { DESKTOP_UA, type HttpSession } from '../http.js'
 
 const API = 'https://api.bilibili.com'
@@ -15,7 +15,7 @@ const HEADERS = { Referer: 'https://www.bilibili.com/', Origin: 'https://www.bil
  * 载荷字段是 B 站前端的混淆键名；以下取值为本项目自拟的一台普通 Windows Chrome 设备，与 DESKTOP_UA 保持一致。
  */
 export function deviceUuid(): string {
-  const hex = randomBytes(18).toString('hex').toUpperCase()
+  const hex = randomHex(36).toUpperCase()
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}${String(Date.now() % 100000).padStart(5, '0')}infoc`
 }
 
@@ -23,7 +23,7 @@ const SCREENS: Array<[number, number, number]> = [[1920, 1080, 1032], [1536, 864
 
 export function gaiaPayload(uuid: string, now = Date.now()): string {
   const [w, h, ah] = SCREENS[randomInt(SCREENS.length)]
-  const canvasTail = randomBytes(12).toString('base64')
+  const canvasTail = toBase64(randomBytesArray(12))
   const content = {
     '3064': 1, '5062': String(now), '03bf': 'https%3A%2F%2Fwww.bilibili.com%2F', '39c8': '333.1007.fp.risk',
     '34f1': '', 'd402': '', '654a': '', '6e7c': `${w - 600}x${ah - 100}`,

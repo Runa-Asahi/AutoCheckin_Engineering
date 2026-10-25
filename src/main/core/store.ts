@@ -1,10 +1,10 @@
-import { randomUUID } from 'node:crypto'
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname } from 'node:path'
+import { uuid } from './portable.js'
 import type { RunRecord } from '../../shared/types.js'
 import type { AIProviderConfig } from '../../shared/schemas.js'
 
 export interface Cipher { encrypt(plain: string): string; decrypt(cipher: string): string }
+/** 存储后端：桌面端为本地文件，手机端为 Android Keystore 保护的安全存储。 */
+export interface Persistence { read(): string | null; write(text: string): void }
 
 export interface AccountRecord {
   id: string
@@ -32,9 +32,11 @@ const DEFAULT_SETTINGS: SettingsRecord = { notifications: true, autoLaunch: fals
 /** 本地 JSON 存储；Cookie 与 API Key 用系统钥匙串（Electron safeStorage）加密后再写盘。 */
 export class Store {
   private data: FileShape
-  constructor(private readonly path: string, private readonly cipher: Cipher) {
+  constructor(private readonly persistence: Persistence, private readonly cipher: Cipher) {
     try {
-      const parsed = JSON.parse(readFileSync(path, 'utf8')) as FileShape
+      const raw = persistence.read()
+      if (!raw) throw new Error('empty')
+      const parsed = JSON.parse(raw) as FileShape
       this.data = { version: 2, accounts: parsed.accounts ?? [], settings: { ...DEFAULT_SETTINGS, ...parsed.settings, ai: { ...DEFAULT_SETTINGS.ai, ...parsed.settings?.ai } } }
     } catch { this.data = { version: 2, accounts: [], settings: structuredClone(DEFAULT_SETTINGS) } }
   }
@@ -54,7 +56,7 @@ export class Store {
     const existing = this.data.accounts.find((item) => item.platform === input.platform && item.uid === input.uid)
     const encrypted = this.cipher.encrypt(JSON.stringify(input.cookies))
     if (existing) { Object.assign(existing, { nickname: input.nickname, cookies: encrypted, loginExpired: false }); this.save(); return existing }
-    const record: AccountRecord = { id: randomUUID(), platform: input.platform, uid: input.uid, nickname: input.nickname, cookies: encrypted, enabled: true, time: '08:00', tasks: input.tasks, loginExpired: false, history: [] }
+    const record: AccountRecord = { id: uuid(), platform: input.platform, uid: input.uid, nickname: input.nickname, cookies: encrypted, enabled: true, time: '08:00', tasks: input.tasks, loginExpired: false, history: [] }
     this.data.accounts.push(record); this.save(); return record
   }
 
@@ -80,10 +82,5 @@ export class Store {
     this.save(); return this.data.settings
   }
 
-  private save(): void {
-    mkdirSync(dirname(this.path), { recursive: true })
-    const temp = `${this.path}.tmp`
-    writeFileSync(temp, JSON.stringify(this.data, null, 2), 'utf8')
-    renameSync(temp, this.path)
-  }
+  private save(): void { this.persistence.write(JSON.stringify(this.data, null, 2)) }
 }

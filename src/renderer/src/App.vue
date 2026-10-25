@@ -140,7 +140,8 @@ onBeforeUnmount(() => { stopQr(); unsubscribe?.() })
         <el-alert v-if="settings.keychainAvailable === false" type="warning" :closable="false" show-icon style="margin-bottom: 12px" title="系统钥匙串不可用" description="登录信息已改用本机密钥文件加密（AES-256-GCM）。这比系统钥匙串弱：拿到你整个用户目录的人可以解密。建议安装并启用系统钥匙串（如 GNOME Keyring / KWallet）。" />
         <el-form label-position="top">
           <el-form-item><el-checkbox v-model="settings.notifications">签到完成后弹出系统通知</el-checkbox></el-form-item>
-          <el-form-item><el-checkbox v-model="settings.autoLaunch">开机自动启动（在托盘里静默运行）</el-checkbox></el-form-item>
+          <el-alert v-if="settings.mobile" type="info" :closable="false" show-icon style="margin-bottom: 12px" title="手机版的定时说明" description="到设定时间会弹出提醒；点提醒（或任何时候打开 App）会自动完成当天还没做的签到。安卓系统限制后台联网，App 不会在你完全不打开的情况下偷偷运行。" />
+          <el-form-item v-if="!settings.mobile"><el-checkbox v-model="settings.autoLaunch">开机自动启动（在托盘里静默运行）</el-checkbox></el-form-item>
           <el-collapse>
             <el-collapse-item title="高级：AI 解释失败原因（可选）" name="ai">
               <p class="muted" style="font-size: 13px">开启后，签到失败时可以让 AI 用大白话解释原因。只会发送脱敏后的结果文字，不会发送登录信息。</p>

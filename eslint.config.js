@@ -4,7 +4,7 @@ import vue from 'eslint-plugin-vue'
 import globals from 'globals'
 
 export default tseslint.config(
-  { ignores: ['out/**', 'dist/**', 'node_modules/**', 'coverage/**', 'test-results/**', 'playwright-report/**', 'drizzle/**'] },
+  { ignores: ['out/**', 'dist/**', 'node_modules/**', 'coverage/**', 'test-results/**', 'playwright-report/**', 'drizzle/**', 'android/**', 'mobile/dist/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   ...vue.configs['flat/essential'],

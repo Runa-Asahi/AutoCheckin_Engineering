@@ -1,6 +1,7 @@
-import { randomUUID } from 'node:crypto'
+import type { WebLogin } from './platform.js'
 import QRCode from 'qrcode'
 import { HttpSession } from './http.js'
+import { uuid } from './portable.js'
 import { PLATFORMS, getPlatform } from './platforms/index.js'
 import { isDue, runAccount } from './runner.js'
 import type { AccountRecord, Store } from './store.js'
@@ -17,6 +18,8 @@ export interface ServiceHooks {
   now?: () => Date
   sleep?: (ms: number) => Promise<void>
   ai?: Pick<UnifiedAIClient, 'generate'>
+  /** 手机端：所有平台都走网页登录。 */
+  mobile?: boolean
 }
 
 export class CheckinService {
@@ -25,14 +28,19 @@ export class CheckinService {
   private readonly ai: Pick<UnifiedAIClient, 'generate'>
   constructor(private readonly store: Store, private readonly hooks: ServiceHooks = {}) { this.ai = hooks.ai ?? new UnifiedAIClient() }
 
-  platforms(): PlatformInfo[] { return PLATFORMS.map(({ id, name, loginHint, tasks, webLogin }) => ({ id, name, loginHint, tasks, loginKind: webLogin ? 'web' : 'qr' })) }
+  /** 该平台在当前设备上使用的网页登录配置（没有则为扫码）。 */
+  loginFor(platformId: string): WebLogin | undefined {
+    const platform = getPlatform(platformId)
+    return this.hooks.mobile ? (platform.mobileLogin ?? platform.webLogin) : platform.webLogin
+  }
+  platforms(): PlatformInfo[] { return PLATFORMS.map(({ id, name, loginHint, tasks }) => ({ id, name, loginHint, tasks, loginKind: this.loginFor(id) ? 'web' : 'qr' })) }
   accounts(): AccountView[] { return this.store.accounts().map((account) => this.view(account)) }
 
   async startQrLogin(platformId: string): Promise<QrStart> {
     const platform = getPlatform(platformId), http = new HttpSession()
     if (!platform.qrStart) throw new Error(`${platform.name} 不支持扫码登录`)
     const ticket = await platform.qrStart(http)
-    const sessionId = randomUUID()
+    const sessionId = uuid()
     this.qr.set(sessionId, { platform: platformId, key: ticket.key, http, createdAt: Date.now() })
     return { sessionId, image: await QRCode.toDataURL(ticket.content, { width: 240, margin: 1 }) }
   }
@@ -56,8 +64,9 @@ export class CheckinService {
   /** 网页登录完成后调用：只保留声明的登录 Cookie，校验登录有效后保存账号。 */
   async completeWebLogin(platformId: string, captured: Record<string, string>): Promise<QrPoll> {
     const platform = getPlatform(platformId)
-    if (!platform.webLogin) return { state: 'error', message: '该平台不支持网页登录' }
-    const missing = platform.webLogin.requiredCookies.filter((name) => !captured[name])
+    const login = this.loginFor(platformId)
+    if (!login) return { state: 'error', message: '该平台不支持网页登录' }
+    const missing = login.requiredCookies.filter((name) => !captured[name])
     if (missing.length) return { state: 'error', message: '没有检测到登录完成，请在窗口里完成登录' }
     const http = new HttpSession(captured)
     try {

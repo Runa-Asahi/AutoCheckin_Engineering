@@ -24,6 +24,8 @@ export interface WebLogin {
   domains: string[]
   /** 这些 Cookie 全部出现后视为登录完成。 */
   requiredCookies: string[]
+  /** 按顺序读取这些地址可见的 Cookie，后者覆盖前者（同名 Cookie 在不同子域时用来选对那一个）。 */
+  cookieUrls?: string[]
 }
 
 export interface Platform {
@@ -36,6 +38,8 @@ export interface Platform {
   /** 成功时，session.cookies 中应已包含登录 Cookie。 */
   qrPoll?(session: HttpSession, key: string): Promise<QrResult>
   webLogin?: WebLogin
+  /** 手机上无法扫自己屏幕上的码，用这个官方网页登录代替扫码。 */
+  mobileLogin?: WebLogin
   /** 登录有效则返回用户资料，否则抛 LoginExpiredError。 */
   profile(session: HttpSession): Promise<Profile>
   /** 依次执行用户勾选的任务；实现内部可共享状态查询。 */

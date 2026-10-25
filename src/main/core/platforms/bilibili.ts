@@ -55,6 +55,7 @@ export const bilibili: Platform = {
   id: 'bilibili',
   name: '哔哩哔哩',
   loginHint: '打开哔哩哔哩 App，点右上角扫一扫',
+  mobileLogin: { url: 'https://passport.bilibili.com/h5-app/passport/login', domains: ['bilibili.com', 'biligame.com'], requiredCookies: ['SESSDATA', 'bili_jct', 'DedeUserID'], cookieUrls: ['https://www.bilibili.com/'] },
   tasks: [WATCH, SHARE, COIN, MANGA],
 
   async qrStart(session) {

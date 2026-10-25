@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Store, type Cipher } from './core/store.js'
 import { createLocalKeyCipher } from './core/localCipher.js'
+import { filePersistence } from './core/filePersistence.js'
 import { getPlatform } from './core/platforms/index.js'
 import type { WebLogin } from './core/platform.js'
 import { randomUUID } from 'node:crypto'
@@ -54,11 +55,15 @@ function openWebLogin(platformId: string, login: WebLogin, parent: BrowserWindow
     }
     const timer = setInterval(async () => {
       if (window.isDestroyed()) return finish(null)
-      const all = await window.webContents.session.cookies.get({})
+      const ses = window.webContents.session
       const jar: Record<string, string> = {}
-      for (const cookie of all) {
-        const domain = (cookie.domain ?? '').replace(/^\./, '')
-        if (login.domains.some((d) => domain === d || domain.endsWith(`.${d}`))) jar[cookie.name] = cookie.value
+      if (login.cookieUrls?.length) {
+        for (const url of login.cookieUrls) for (const cookie of await ses.cookies.get({ url })) jar[cookie.name] = cookie.value
+      } else {
+        for (const cookie of await ses.cookies.get({})) {
+          const domain = (cookie.domain ?? '').replace(/^\./, '')
+          if (login.domains.some((d) => domain === d || domain.endsWith(`.${d}`))) jar[cookie.name] = cookie.value
+        }
       }
       if (login.requiredCookies.every((name) => jar[name] && jar[name] !== '0')) finish(jar)
     }, 1000)
@@ -86,7 +91,7 @@ function showMainWindow(): void {
 async function start(): Promise<void> {
   const cipher = createCipher()
   if (!keychainAvailable) console.warn('系统钥匙串不可用，已改用本地密钥加密登录信息')
-  const store = new Store(join(app.getPath('userData'), 'autocheckin-v2.json'), cipher)
+  const store = new Store(filePersistence(join(app.getPath('userData'), 'autocheckin-v2.json')), cipher)
   const broadcast = (channel: string, payload: unknown): void => { for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed()) w.webContents.send(channel, payload) }
   const service = new CheckinService(store, {
     onChange: (accounts) => broadcast('accounts:changed', accounts),
@@ -100,8 +105,9 @@ async function start(): Promise<void> {
   ipcMain.handle('qr:poll', (_e, id: string) => service.pollQrLogin(String(id)))
   ipcMain.handle('web:login', async (_e, platformId: string) => {
     const platform = getPlatform(String(platformId))
-    if (!platform.webLogin) return { state: 'error', message: '该平台不支持网页登录' }
-    const cookies = await openWebLogin(platform.id, platform.webLogin, mainWindow)
+    const login = service.loginFor(platform.id)
+    if (!login) return { state: 'error', message: '该平台不支持网页登录' }
+    const cookies = await openWebLogin(platform.id, login, mainWindow)
     if (!cookies) return { state: 'expired', message: '登录窗口已关闭' }
     return service.completeWebLogin(platform.id, cookies)
   })

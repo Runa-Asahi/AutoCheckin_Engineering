@@ -1,4 +1,20 @@
-import axios, { type AxiosResponse } from 'axios'
+import axios from 'axios'
+
+export interface TransportRequest { method: 'GET' | 'POST'; url: string; params?: Record<string, string | number>; headers: Record<string, string>; data?: unknown; timeoutMs: number }
+export interface TransportResponse { status: number; headers: Record<string, unknown>; data: unknown }
+/** 实际发请求的底层实现。实现方必须在每次跳转前调用 isAllowedUrl 拦截白名单外地址。 */
+export type Transport = (request: TransportRequest) => Promise<TransportResponse>
+
+/** 桌面端（Node）：axios，跳转前检查白名单。 */
+export const axiosTransport: Transport = async (request) => {
+  const response = await axios.request({ method: request.method, url: request.url, params: request.params, data: request.data, headers: request.headers, timeout: request.timeoutMs, maxRedirects: 3, validateStatus: () => true,
+    beforeRedirect: (redirect: { href?: string }) => { if (!isAllowedUrl(String(redirect.href ?? ''))) throw new NetworkError('已拦截跳转到白名单外的地址') } })
+  return { status: response.status, headers: response.headers as Record<string, unknown>, data: response.data }
+}
+
+let transport: Transport = axiosTransport
+/** 手机端启动时替换为原生 HTTP。 */
+export function setTransport(next: Transport): void { transport = next }
 
 export const DESKTOP_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
 const RETRYABLE = new Set(['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'EAI_AGAIN', 'ENOTFOUND', 'ECONNREFUSED', 'EPIPE'])
@@ -57,7 +73,7 @@ export class HttpSession {
     return body as T
   }
 
-  async request(options: RequestOptions): Promise<AxiosResponse> {
+  async request(options: RequestOptions): Promise<TransportResponse> {
     if (!isAllowedUrl(options.url)) throw new NetworkError(`已拦截不在白名单内的网络请求：${safeHost(options.url)}`)
     const retries = this.opts.retries ?? 2, sleep = this.opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)))
     let lastError: Error = new NetworkError('网络请求失败')
@@ -68,8 +84,7 @@ export class HttpSession {
         let data: unknown
         if (options.form) { data = new URLSearchParams(Object.entries(options.form).map(([k, v]) => [k, String(v)])).toString(); headers['Content-Type'] = 'application/x-www-form-urlencoded' }
         else if (options.json !== undefined) { data = options.json; headers['Content-Type'] = 'application/json' }
-        const response = await axios.request({ method: options.method ?? 'GET', url: options.url, params: options.params, data, headers, timeout: options.timeoutMs ?? 15_000, maxRedirects: 3, validateStatus: () => true,
-          beforeRedirect: (redirect: { href?: string }) => { if (!isAllowedUrl(String(redirect.href ?? ''))) throw new NetworkError('已拦截跳转到白名单外的地址') } })
+        const response = await transport({ method: options.method ?? 'GET', url: options.url, params: options.params, data, headers, timeoutMs: options.timeoutMs ?? 15_000 })
         this.absorb(response.headers['set-cookie'])
         if (response.status === 429 || response.status >= 500) { lastError = new NetworkError(`服务器暂时不可用（HTTP ${response.status}）`) }
         else if (response.status === 412) throw new NetworkError('请求被平台风控拦截（HTTP 412），请稍后再试')
@@ -86,8 +101,9 @@ export class HttpSession {
   }
 
   private absorb(raw: unknown): void {
-    if (!Array.isArray(raw)) return
-    for (const line of raw as string[]) {
+    // 原生 HTTP 可能把多条 Set-Cookie 用逗号合并；按“逗号后紧跟 name=”拆分（Expires 中的逗号后面不是 name=）
+    const lines = Array.isArray(raw) ? raw.map(String) : typeof raw === 'string' ? raw.split(/,(?=\s*[A-Za-z0-9_.-]+=)/) : []
+    for (const line of lines) {
       const first = line.split(';')[0], index = first.indexOf('=')
       if (index <= 0) continue
       const name = first.slice(0, index).trim(), value = first.slice(index + 1).trim()

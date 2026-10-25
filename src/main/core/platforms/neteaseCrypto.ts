@@ -1,19 +1,21 @@
-import { createCipheriv, createHash, randomBytes } from 'node:crypto'
+import CryptoJS from 'crypto-js'
+import { randomBytesArray } from '../portable.js'
 
 /**
- * 网易云音乐 weapi 加密，与 NeteaseCloudMusicApi（util/crypto.js）一致：
- *   params    = AES-128-CBC(AES-128-CBC(JSON, presetKey), secretKey) 的 Base64
- *   encSecKey = RSA(reverse(secretKey))，无填充，十六进制 256 位
+ * 网易云音乐 weapi / eapi 加密，与 NeteaseCloudMusicApi（util/crypto.js）一致。
+ * 使用纯 JS 的 crypto-js，桌面端（Node）与手机端（WebView）共用同一份代码。
+ *   weapi: params = AES-128-CBC(AES-128-CBC(JSON, presetKey), secretKey) 的 Base64；encSecKey = RSA(reverse(secretKey)) 无填充
+ *   eapi : params = HEX(AES-128-ECB(`${uri}-36cd479b6b5-${json}-36cd479b6b5-${md5}`))
  */
 const PRESET_KEY = '0CoJUm6Qyw8W8jud'
 const IV = '0102030405060708'
+const EAPI_KEY = 'e82ckenh8dichen8'
 const BASE62 = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 const MODULUS = BigInt('0x00e0b509f6259df8642dbc35662901477df22677ec152b5ff68ace615bb7b725152b3ab17a876aea8a5aa76d2e417629ec4ee341f56135fccf695280104e0312ecbda92557c93870114af6c9d05c4f7f0c3685b7a46bee255932575cce10b424d813cfe4875d3e82047b97ddef52741d546b8e289dc6935b3ece0462db0a22b8e7')
 const EXPONENT = 0x10001n
 
 function aesCbcBase64(text: string, key: string): string {
-  const cipher = createCipheriv('aes-128-cbc', Buffer.from(key), Buffer.from(IV))
-  return Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]).toString('base64')
+  return CryptoJS.AES.encrypt(CryptoJS.enc.Utf8.parse(text), CryptoJS.enc.Utf8.parse(key), { iv: CryptoJS.enc.Utf8.parse(IV), mode: CryptoJS.mode.CBC, padding: CryptoJS.pad.Pkcs7 }).toString()
 }
 
 function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
@@ -22,28 +24,24 @@ function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
   return result
 }
 
+function utf8Hex(text: string): string { return [...new TextEncoder().encode(text)].map((b) => b.toString(16).padStart(2, '0')).join('') }
+
 export function rsaNoPadding(text: string): string {
   const reversed = [...text].reverse().join('')
-  const value = BigInt(`0x${Buffer.from(reversed).toString('hex')}`)
-  return modPow(value, EXPONENT, MODULUS).toString(16).padStart(256, '0')
+  return modPow(BigInt(`0x${utf8Hex(reversed)}`), EXPONENT, MODULUS).toString(16).padStart(256, '0')
 }
 
 export function weapi(data: object, secretKey?: string): { params: string; encSecKey: string } {
-  const key = secretKey ?? [...randomBytes(16)].map((byte) => BASE62[byte % 62]).join('')
+  const key = secretKey ?? [...randomBytesArray(16)].map((byte) => BASE62[byte % 62]).join('')
   return { params: aesCbcBase64(aesCbcBase64(JSON.stringify(data), PRESET_KEY), key), encSecKey: rsaNoPadding(key) }
 }
 
-const EAPI_KEY = 'e82ckenh8dichen8'
+export function md5Hex(text: string): string { return CryptoJS.MD5(CryptoJS.enc.Utf8.parse(text)).toString(CryptoJS.enc.Hex) }
 
-/**
- * 网易云音乐 eapi 加密（客户端接口），与 NeteaseCloudMusicApi 一致：
- *   params = HEX(AES-128-ECB(`${uri}-36cd479b6b5-${json}-36cd479b6b5-${md5("nobody"+uri+"use"+json+"md5forencrypt")}`))
- * uri 形如 /api/point/dailyTask。
- */
 export function eapi(uri: string, data: object): { params: string } {
   const text = JSON.stringify(data)
-  const digest = createHash('md5').update(`nobody${uri}use${text}md5forencrypt`).digest('hex')
-  const cipher = createCipheriv('aes-128-ecb', Buffer.from(EAPI_KEY), null)
+  const digest = md5Hex(`nobody${uri}use${text}md5forencrypt`)
   const payload = `${uri}-36cd479b6b5-${text}-36cd479b6b5-${digest}`
-  return { params: Buffer.concat([cipher.update(payload, 'utf8'), cipher.final()]).toString('hex').toUpperCase() }
+  const encrypted = CryptoJS.AES.encrypt(CryptoJS.enc.Utf8.parse(payload), CryptoJS.enc.Utf8.parse(EAPI_KEY), { mode: CryptoJS.mode.ECB, padding: CryptoJS.pad.Pkcs7 })
+  return { params: encrypted.ciphertext.toString(CryptoJS.enc.Hex).toUpperCase() }
 }
