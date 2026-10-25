@@ -11,8 +11,9 @@ const retryablePattern = /timeout|timed out|ECONN|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|
 const alreadyPattern = /已签到|今日已签|已经签到|已领取|签到成功/
 const negativeAlreadyPattern = /未签到|尚未签到|签到失败|没有签到/
 
-export function classifyOutcome(input: { success: boolean; message?: string; responseSummary?: string; failureRules?: Adapter['failure_rules'] }): CheckinOutcome {
+export function classifyOutcome(input: { success: boolean; outcome?: CheckinOutcome; message?: string; responseSummary?: string; failureRules?: Adapter['failure_rules'] }): CheckinOutcome {
   const text = `${input.message ?? ''}\n${input.responseSummary ?? ''}`
+  if (input.outcome) return input.outcome
   if (input.success || (alreadyPattern.test(text) && !negativeAlreadyPattern.test(text))) return 'success'
   for (const rule of input.failureRules ?? []) {
     const matched = rule.type === 'body_regex' ? safeRegex(rule.value).test(text) : text.includes(rule.value)

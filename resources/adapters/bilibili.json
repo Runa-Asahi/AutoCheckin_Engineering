@@ -1,0 +1,12 @@
+{
+  "site_id": "bilibili",
+  "site_name": "哔哩哔哩",
+  "site_url": "https://www.bilibili.com/",
+  "description": "每日任务：登录、观看、分享（经验 +15），可选投币；附带漫画签到。投币默认关闭，需在任务配置 plugin_options.coins 中开启。",
+  "cookie_hint": "登录 www.bilibili.com 后复制 Cookie 请求头。必须包含 SESSDATA 与 bili_jct，建议包含 DedeUserID、buvid3。",
+  "engine_type": "native",
+  "login_type": "cookie",
+  "plugin": { "id": "bilibili", "options": { "watch": true, "share": true, "coins": 0, "coin_select_like": false, "coin_reserve": 0, "manga": true, "live": false } },
+  "success_rules": [],
+  "cookie_domains": [".bilibili.com"]
+}

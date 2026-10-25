@@ -6,6 +6,8 @@ import type { CreateTaskInput, TaskListQuery, UpdateTaskInput } from '../../shar
 import type { BrowserProgress, ExecutionLog, ExecutionResult, ScheduleSnapshot, Task } from '../../shared/types.js'
 import { computeConsecutiveDays } from '../../shared/localTime.js'
 import { HttpEngine } from '../engine/httpEngine.js'
+import { NativeEngine } from '../engine/nativeEngine.js'
+import type { CheckinOutcome } from '../../shared/types.js'
 import { sanitizeLog } from '../security/logSanitizer.js'
 import { BrowserEngine, type BrowserCookie } from '../browser/browserEngine.js'
 import { buildVariables } from '../engine/variableTemplate.js'
@@ -15,6 +17,7 @@ import type { SuccessEvidence } from './schedulePolicy.js'
 
 export class TaskService {
   private readonly httpEngine = new HttpEngine()
+  private readonly nativeEngine = new NativeEngine()
   private readonly browserEngine: BrowserEngine
   private readonly inflight = new Map<string, Promise<ExecutionResult>>()
   constructor(private db: AppDatabase, private crypto: CredentialEncryptor, private adapters: AdapterRegistry, userDataDir: string, private readonly onBrowserProgress: (progress: BrowserProgress) => void = () => undefined, private readonly getTimezone: () => string = () => 'Asia/Shanghai', private readonly now: () => Date = () => new Date()) {
@@ -97,14 +100,14 @@ export class TaskService {
       const variables = buildVariables(this.loadCredentials(id))
       const config = JSON.parse(task.config_json || '{}') as { maxRetries?: number }
       const maxRetries = Math.max(0, Math.min(3, Number(config.maxRetries ?? 0)))
-      let output: { success: boolean; message: string; requestSummary?: string; responseSummary: string; screenshotPath?: string | null; engineUsed: string; cookies?: BrowserCookie[] } | undefined
+      let output: { success: boolean; message: string; requestSummary?: string; responseSummary: string; screenshotPath?: string | null; engineUsed: string; cookies?: BrowserCookie[]; outcome?: CheckinOutcome } | undefined
       let lastError: unknown
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
         retryCount = attempt
         try {
           output = await this.executeWithEngine(task, adapter, variables)
           lastError = undefined
-          const outcome = classifyOutcome({ success: output.success, message: output.message, responseSummary: output.responseSummary, failureRules: adapter.failure_rules })
+          const outcome = classifyOutcome({ success: output.success, outcome: output.outcome, message: output.message, responseSummary: output.responseSummary, failureRules: adapter.failure_rules })
           if (outcome === 'success' || outcome === 'authentication_required' || outcome === 'manual_action_required' || outcome === 'permanent_failure' || attempt === maxRetries) break
         } catch (error) {
           lastError = error
@@ -116,7 +119,7 @@ export class TaskService {
       }
       if (!output) throw lastError ?? new Error('执行引擎没有返回结果')
       if (output.cookies?.length) this.replaceCookies(id, output.cookies)
-      const outcome = classifyOutcome({ success: output.success, message: output.message, responseSummary: output.responseSummary, failureRules: adapter.failure_rules })
+      const outcome = classifyOutcome({ success: output.success, outcome: output.outcome, message: output.message, responseSummary: output.responseSummary, failureRules: adapter.failure_rules })
       const success = outcome === 'success'
       const status = success ? 'success' : 'failed'
       const durationMs = Date.now() - started
@@ -148,7 +151,12 @@ export class TaskService {
     return { count: cookies.length }
   }
 
-  private async executeWithEngine(task: Task, adapter: ReturnType<AdapterRegistry['get']>, variables: Record<string, string>): Promise<{ success: boolean; message: string; requestSummary?: string; responseSummary: string; screenshotPath?: string | null; engineUsed: string; cookies?: BrowserCookie[] }> {
+  private async executeWithEngine(task: Task, adapter: ReturnType<AdapterRegistry['get']>, variables: Record<string, string>): Promise<{ success: boolean; message: string; requestSummary?: string; responseSummary: string; screenshotPath?: string | null; engineUsed: string; cookies?: BrowserCookie[]; outcome?: CheckinOutcome }> {
+    if (task.engine_type === 'native' || adapter.engine_type === 'native') {
+      const config = JSON.parse(task.config_json || '{}') as { plugin_options?: Record<string, unknown> }
+      const output = await this.nativeEngine.execute(adapter, this.loadCookies(task.id), config.plugin_options ?? {})
+      return { ...output, engineUsed: 'native' }
+    }
     if (task.engine_type === 'http' || task.engine_type === 'api') {
       const output = await this.httpEngine.execute({ adapter, variables, cookieHeader: this.loadCookies(task.id) })
       return { ...output, engineUsed: task.engine_type, cookies: parseSetCookies(output.setCookies, adapter.cookie_domains[0] ?? new URL(adapter.site_url).hostname) }

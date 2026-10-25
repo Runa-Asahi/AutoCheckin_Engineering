@@ -34,6 +34,8 @@ AutoCheckin 是一款本地优先的自动签到桌面应用。任务、凭据�
 
 | 站点 | 引擎 |
 | --- | --- |
+| 网易云音乐（每日签到 + 云贝） | 原生插件（Cookie） |
+| 哔哩哔哩（登录/观看/分享/可选投币 + 漫画签到） | 原生插件（Cookie） |
 | 百度贴吧 | 浏览器 |
 | HiFiNi 音乐磁场 | 浏览器 |
 | HostLoc | 浏览器 |
@@ -43,6 +45,33 @@ AutoCheckin 是一款本地优先的自动签到桌面应用。任务、凭据�
 登录可以用 Cookie、AutoCheckin 专用浏览器档案，或本机已经装好的 Chrome / Edge Profile。
 
 没有现成适配器时，打开 AI 向导。它可以使用 OpenAI、Anthropic、Gemini、DeepSeek、GLM，或任何兼容接口，根据页面生成一份适配器。页面分析只接受 HTTP(S) 地址，并拒绝本机、局域网和链路本地地址。
+
+## 原生插件与通用适配器
+
+签到流程分三层，越往下越通用：
+
+1. **原生插件（`engine_type: "native"`）**：为需要多步调用、CSRF、业务码判断的平台写的 TypeScript 插件，位于 `src/main/plugins/`。运行前先检测登录态，Cookie 失效时报“需要重新登录”而不是反复重试；网络错误、429、5xx 自动指数退避重试；412 风控转人工处理。一次运行包含多个子任务，结果逐项列出。
+2. **JSON HTTP 适配器（`http` / `api` / `hybrid`）**：支持 `pre_requests` + `extract` 链式请求（先取 token 再签到）、`{{cookie.名称}}` 模板引用 Cookie（常用于 CSRF）、`form: true` 表单编码、`failure_rules` 把“未登录”等文本映射为登录失效。
+3. **浏览器流程（`browser` / `hybrid`）**：Playwright 步骤，适合没有接口的站点。
+
+### 网易云音乐
+
+- Cookie 必须含 `MUSIC_U`，建议含 `__csrf`（登录 music.163.com 后从开发者工具“网络”面板复制请求头里的 Cookie）。
+- 插件选项：`sign_types`（默认 `[0,1]`，0=安卓端、1=网页/PC 端）、`yunbei`（默认 `true`，云贝签到）。
+
+### 哔哩哔哩
+
+- Cookie 必须含 `SESSDATA` 与 `bili_jct`，建议含 `DedeUserID`、`buvid3`。
+- 插件选项：`watch`（默认 `true`）、`share`（默认 `true`）、`coins`（默认 `0`，每天投币数 0~5，会扣除今日已投）、`coin_select_like`、`coin_reserve`（保留硬币数）、`manga`（默认 `true`）、`live`（默认 `false`，直播签到接口已不稳定）。
+- 每日任务状态先查 `/x/member/web/exp/reward`，已完成的子任务不会重复执行。
+
+创建任务时可以在“插件选项”里填 JSON 覆盖默认值，例如 `{"coins": 1}`。
+
+### 写一个新插件
+
+实现 `NativePlugin`（`id`、`name`、`requiredCookies`、`run(ctx)`），在 `src/main/plugins/registry.ts` 里 `registerPlugin`，再在 `resources/adapters/` 放一份 `engine_type: "native"` 的 JSON。`ctx.http` 已带 Cookie、UA 与重试；抛 `CheckinError(message, outcome)` 即可精确控制调度器行为。用 nock 写测试，参考 `tests/nativePlugins.test.ts`。
+
+AI 向导生成适配器时会自动使用上述 `pre_requests`、`{{cookie.X}}`、`failure_rules` 等能力；识别到网易云 / B 站时直接引用内置插件。AI 诊断不会把原生插件改写成请求，只会建议调整选项或提示更新 Cookie。
 
 ## 数据留在这台电脑
 
