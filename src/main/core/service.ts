@@ -26,7 +26,11 @@ export class CheckinService {
   private readonly qr = new Map<string, QrSession>()
   private readonly running = new Set<string>()
   private readonly ai: Pick<UnifiedAIClient, 'generate'>
-  constructor(private readonly store: Store, private readonly hooks: ServiceHooks = {}) { this.ai = hooks.ai ?? new UnifiedAIClient() }
+  constructor(private readonly store: Store, private readonly hooks: ServiceHooks = {}) {
+    this.ai = hooks.ai ?? new UnifiedAIClient()
+    // 已下线的平台（如 alpha.2 的洛谷）：连同其登录信息一起删除，避免残留凭据
+    for (const account of store.accounts().filter((a) => !PLATFORMS.some((p) => p.id === a.platform))) store.remove(account.id)
+  }
 
   /** 该平台在当前设备上使用的网页登录配置（没有则为扫码）。 */
   loginFor(platformId: string): WebLogin | undefined {

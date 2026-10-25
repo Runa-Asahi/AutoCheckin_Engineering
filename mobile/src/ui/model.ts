@@ -5,7 +5,6 @@ export const BRAND: Record<string, { color: string; glyph: string }> = {
   netease: { color: '#E20000', glyph: '云' },
   bilibili: { color: '#FB7299', glyph: 'B' },
   tieba: { color: '#3388FF', glyph: '贴' },
-  luogu: { color: '#7C4DFF', glyph: '洛' },
 }
 export const brand = (id: string): { color: string; glyph: string } => BRAND[id] ?? { color: '#6750A4', glyph: id.slice(0, 1).toUpperCase() }
 

@@ -1,5 +1,5 @@
 import { CapacitorHttp } from '@capacitor/core'
-import { isAllowedUrl, NetworkError, type Transport } from '../../src/main/core/http'
+import { blockedMessage, isAllowedUrl, NetworkError, type Transport } from '../../src/main/core/http'
 
 /**
  * Android 原生 HTTP（绕过 WebView 的 CORS / Cookie 限制，可自由设置 Cookie、Referer、User-Agent）。
@@ -9,7 +9,7 @@ export const nativeTransport: Transport = async (request) => {
   let url = request.url
   let { method, data } = request
   for (let hop = 0; hop <= 3; hop++) {
-    if (!isAllowedUrl(url)) throw new NetworkError('已拦截白名单外的地址')
+    if (!isAllowedUrl(url)) throw new NetworkError(blockedMessage(url, hop > 0))
     const headers = { ...request.headers }
     const type = String(Object.entries(headers).find(([key]) => key.toLowerCase() === 'content-type')?.[1] ?? '')
     // 原生层对表单要求传对象，这里把已编码的字符串还原

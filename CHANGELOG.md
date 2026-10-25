@@ -1,6 +1,19 @@
 # Changelog
 
-## 2.0.0-alpha.1（未发布）
+## 2.0.0-alpha.3（预发布）
+
+- 修复：百度贴吧登录校验失败「已拦截跳转到白名单外的地址」。原因是 `https://tieba.baidu.com/dc/common/tbs` 会 301 降级到 `http://`，被 HTTPS-only 策略拦截；现改为从 HTTPS 的 `/mo/q/newmoindex` 读取 tbs 与登录状态，白名单无需放宽
+- 拦截提示中写明被拦截的协议与主机名（不含路径、参数或 Cookie），便于排查
+- 移除洛谷模块（代码、界面、测试、白名单 `luogu.com.cn`）；升级后自动删除旧的洛谷账号及其登录信息
+- 安卓：全新手机界面（Material 3 风格、深色模式）；B 站 / 网易云手机端改为扫码 + 「在官方 App 中确认」/「保存二维码到相册」
+- README / 文档更新
+
+## 2.0.0-alpha.2（预发布）
+
+- 新增百度贴吧、洛谷签到；网络域名白名单；Linux 无钥匙串时的本地密钥加密
+- 首个安卓版（Capacitor，复用同一套核心）
+
+## 2.0.0-alpha.1（预发布）
 
 - 全新重写：扫码登录，简单界面，每项任务都在执行后确认结果
 - 网易云音乐：采用与 NeteaseCloudMusicApi 一致的 eapi / weapi 加密，签到后查询 `mobileSign` / `pcSign` 确认结果

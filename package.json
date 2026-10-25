@@ -1,6 +1,6 @@
 {
   "name": "autocheckin",
-  "version": "2.0.0-alpha.2",
+  "version": "2.0.0-alpha.3",
   "private": true,
   "description": "扫码即用的自动签到桌面应用",
   "author": {

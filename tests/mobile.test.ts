@@ -13,7 +13,7 @@ afterEach(() => { request.mockReset(); setTransport(axiosTransport) })
 describe('手机原生 HTTP 传输', () => {
   it('表单字符串还原为对象、解析 JSON、关闭原生自动跳转', async () => {
     request.mockResolvedValue({ status: 200, headers: { 'Content-Type': 'application/json' }, data: '{"code":0}' })
-    const res = await nativeTransport({ method: 'POST', url: 'https://www.luogu.com.cn/x', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, data: 'a=1&b=%E4%BD%A0', timeoutMs: 1000 })
+    const res = await nativeTransport({ method: 'POST', url: 'https://tieba.baidu.com/x', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, data: 'a=1&b=%E4%BD%A0', timeoutMs: 1000 })
     expect(res.data).toEqual({ code: 0 })
     expect(request.mock.calls[0][0]).toMatchObject({ data: { a: '1', b: '你' }, disableRedirects: true })
   })
@@ -41,10 +41,10 @@ describe('可替换传输层', () => {
 })
 
 describe('手机端登录方式', () => {
-  it('手机上 B 站/网易云扫码为主（可改网页登录），贴吧/洛谷用官方网页登录', () => {
+  it('手机上 B 站/网易云扫码为主（可改网页登录），贴吧用官方网页登录', () => {
     const service = new CheckinService(tempStore().store, { mobile: true })
     const kinds = Object.fromEntries(service.platforms().map((p) => [p.id, [p.loginKind, p.webFallback]]))
-    expect(kinds).toEqual({ netease: ['qr', true], bilibili: ['qr', true], tieba: ['web', false], luogu: ['web', false] })
+    expect(kinds).toEqual({ netease: ['qr', true], bilibili: ['qr', true], tieba: ['web', false] })
     expect(service.loginFor('bilibili')?.requiredCookies).toContain('SESSDATA')
     const desktop = new CheckinService(tempStore().store)
     expect(desktop.platforms().find((p) => p.id === 'netease')?.loginKind).toBe('qr')

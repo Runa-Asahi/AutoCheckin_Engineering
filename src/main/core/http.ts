@@ -8,7 +8,7 @@ export type Transport = (request: TransportRequest) => Promise<TransportResponse
 /** 桌面端（Node）：axios，跳转前检查白名单。 */
 export const axiosTransport: Transport = async (request) => {
   const response = await axios.request({ method: request.method, url: request.url, params: request.params, data: request.data, headers: request.headers, timeout: request.timeoutMs, maxRedirects: 3, validateStatus: () => true,
-    beforeRedirect: (redirect: { href?: string }) => { if (!isAllowedUrl(String(redirect.href ?? ''))) throw new NetworkError('已拦截跳转到白名单外的地址') } })
+    beforeRedirect: (redirect: { href?: string }) => { if (!isAllowedUrl(String(redirect.href ?? ''))) throw new NetworkError(blockedMessage(String(redirect.href ?? ''))) } })
   return { status: response.status, headers: response.headers as Record<string, unknown>, data: response.data }
 }
 
@@ -24,7 +24,7 @@ const RETRYABLE = new Set(['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'EAI_AGAIN
  * 任何其它地址（含局域网、本机）都会被拒绝，防止数据被发往第三方。
  * AI 服务由用户在“高级设置”中显式填写，走独立客户端，不经过这里。
  */
-export const ALLOWED_DOMAINS = ['music.163.com', 'bilibili.com', 'baidu.com', 'luogu.com.cn']
+export const ALLOWED_DOMAINS = ['music.163.com', 'bilibili.com', 'baidu.com']
 
 export function isAllowedUrl(raw: string): boolean {
   let url: URL
@@ -74,7 +74,7 @@ export class HttpSession {
   }
 
   async request(options: RequestOptions): Promise<TransportResponse> {
-    if (!isAllowedUrl(options.url)) throw new NetworkError(`已拦截不在白名单内的网络请求：${safeHost(options.url)}`)
+    if (!isAllowedUrl(options.url)) throw new NetworkError(blockedMessage(options.url, false))
     const retries = this.opts.retries ?? 2, sleep = this.opts.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)))
     let lastError: Error = new NetworkError('网络请求失败')
     for (let attempt = 0; attempt <= retries; attempt++) {
@@ -114,4 +114,11 @@ export class HttpSession {
   }
 }
 
-function safeHost(raw: string): string { try { return new URL(raw).host } catch { return '无效地址' } }
+
+/** 被拦截地址的说明：只含协议和主机名（不含路径/参数/Cookie），方便排查。 */
+export function blockedMessage(raw: string, redirect = true): string {
+  let target = '无效地址'
+  try { const u = new URL(raw); target = `${u.protocol}//${u.host}` } catch { /* 保持“无效地址” */ }
+  const why = /^http:/.test(target) ? '不允许降级为不加密的 http' : '不在官方域名白名单内'
+  return `${redirect ? '已拦截跳转' : '已拦截请求'}：${target}（${why}）`
+}

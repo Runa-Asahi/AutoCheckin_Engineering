@@ -14,7 +14,6 @@ const platforms: PlatformInfo[] = [
   { id: 'netease', name: '网易云音乐', appName: '网易云音乐', loginHint: '', loginKind: 'qr', webFallback: true, tasks: [t('sign', '每日签到', '手机端 + 电脑端签到'), t('yunbei', '云贝签到', '领取每日云贝')] },
   { id: 'bilibili', name: '哔哩哔哩', appName: '哔哩哔哩', loginHint: '', loginKind: 'qr', webFallback: true, tasks: [t('watch', '观看视频', '+5 经验'), t('share', '分享视频', '+5 经验'), t('coin', '投币', '最多 +50 经验'), t('manga', '漫画签到', '每日签到')] },
   { id: 'tieba', name: '百度贴吧', appName: '百度贴吧', loginHint: '', loginKind: 'web', tasks: [t('sign', '关注的吧签到', '签到所有关注的吧')] },
-  { id: 'luogu', name: '洛谷', appName: '洛谷', loginHint: '', loginKind: 'web', tasks: [t('punch', '每日打卡', '打卡并查看今日运势')] },
 ]
 const run = (results: RunRecord['results'], h = 8, m = 1): RunRecord => ({ at: at(h, m), date, trigger: 'schedule', attempt: 1, results })
 const accounts: AccountView[] = empty ? [] : [
@@ -24,7 +23,6 @@ const accounts: AccountView[] = empty ? [] : [
     lastRun: run([{ taskId: 'sign', label: '每日签到', status: 'success', message: '手机端 +3、电脑端 +5 已确认' }, { taskId: 'yunbei', label: '云贝签到', status: 'success', message: '已领取 2 云贝' }], 8, 0), history: [] },
   { id: 'a3', platform: 'tieba', platformName: '百度贴吧', nickname: 'runa_s', uid: '3', enabled: true, time: '09:30', tasks: { sign: true }, loginExpired: false, running: false,
     lastRun: run([{ taskId: 'sign', label: '关注的吧签到', status: 'success', message: '共 12 个吧：新签到 11，原本已签 1，未成功 0' }], 9, 30), history: [] },
-  { id: 'a4', platform: 'luogu', platformName: '洛谷', nickname: 'runa', uid: '4', enabled: true, time: '07:00', tasks: { punch: true }, loginExpired: true, running: false, lastRun: null, history: [] },
 ]
 for (const a of accounts) if (a.lastRun) a.history = [a.lastRun, { ...a.lastRun, date: '2026-10-24', at: new Date(Date.parse(a.lastRun.at) - 864e5).toISOString() }]
 const settings = { notifications: true, autoLaunch: false, keychainAvailable: true, mobile: true, ai: { enabled: false, provider: 'deepseek' as const, baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat', hasKey: false } }
