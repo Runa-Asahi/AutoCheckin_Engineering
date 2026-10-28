@@ -1,0 +1,55 @@
+import type { HttpSession } from './http.js'
+import type { PlatformTaskInfo, QrState, TaskResult } from '../../shared/types.js'
+
+export interface QrTicket { key: string; content: string }
+export interface QrResult { state: QrState; message: string }
+export interface Profile { uid: string; nickname: string }
+
+export interface TaskContext {
+  session: HttpSession
+  now: () => Date
+  sleep: (ms: number) => Promise<void>
+}
+
+/**
+ * 平台插件接口。新增平台只需要实现这个接口并在 platforms/index.ts 注册，
+ * 用户界面会自动出现“扫码添加账号”与任务开关，无需任何用户配置。
+ *
+ * 约定：runTask 必须“执行后再查询确认”，只有平台状态接口确认完成才能返回 success/already。
+ */
+/** 网页登录：打开平台官方登录页，用户自己登录（可过验证码），程序只截获登录完成后的 Cookie。 */
+export interface WebLogin {
+  url: string
+  /** 只读取这些域名下的 Cookie。 */
+  domains: string[]
+  /** 这些 Cookie 全部出现后视为登录完成。 */
+  requiredCookies: string[]
+  /** 按顺序读取这些地址可见的 Cookie，后者覆盖前者（同名 Cookie 在不同子域时用来选对那一个）。 */
+  cookieUrls?: string[]
+}
+
+export interface Platform {
+  id: string
+  name: string
+  loginHint: string
+  tasks: PlatformTaskInfo[]
+  /** 二者择一：扫码登录（qrStart/qrPoll）或网页登录（webLogin）。 */
+  qrStart?(session: HttpSession): Promise<QrTicket>
+  /** 成功时，session.cookies 中应已包含登录 Cookie。 */
+  qrPoll?(session: HttpSession, key: string): Promise<QrResult>
+  webLogin?: WebLogin
+  /** 官方 App 名称 */
+  appName?: string
+  /** 把二维码内容包装成可直接唤起官方 App 打开的链接（手机端用） */
+  appLink?(qrContent: string): string
+  /** 手机上无法扫自己屏幕上的码，用这个官方网页登录代替扫码。 */
+  mobileLogin?: WebLogin
+  /** 登录有效则返回用户资料，否则抛 LoginExpiredError。 */
+  profile(session: HttpSession): Promise<Profile>
+  /** 依次执行用户勾选的任务；实现内部可共享状态查询。 */
+  run(taskIds: string[], ctx: TaskContext): Promise<TaskResult[]>
+}
+
+export function result(task: PlatformTaskInfo, status: TaskResult['status'], message: string): TaskResult {
+  return { taskId: task.id, label: task.label, status, message }
+}

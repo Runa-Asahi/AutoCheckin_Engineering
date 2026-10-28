@@ -34,3 +34,5 @@ data/
 .DS_Store
 Thumbs.db
 desktop.ini
+mobile/dist
+screens/

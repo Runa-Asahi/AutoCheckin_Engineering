@@ -4,18 +4,20 @@
 
 1. 使用 Node.js 22 和 pnpm 10 安装依赖：`pnpm install --frozen-lockfile`。
 2. 从 `main` 创建功能分支并保持改动聚焦。
-3. 提交前运行 `pnpm run typecheck`、`pnpm test`、`pnpm run build` 和 `pnpm test:e2e`。
+3. 提交前运行 `pnpm run typecheck`、`pnpm run typecheck:mobile`、`pnpm test`、`pnpm run build` 和 `pnpm test:e2e`；改动手机界面时用 `pnpm screens:mobile` 检查截图。
 4. Pull Request 中说明行为变化、验证方式和相关 Issue。
 
-## 适配器要求
+## 平台插件要求
 
-- 适配器只能执行签到所必需的操作。
+- 平台插件只能执行签到所必需的操作，且必须在执行后查询平台状态确认结果。
+- 只能访问 `src/main/core/http.ts` 白名单内的官方 HTTPS 域名；新增平台需同时加入白名单，且只加入最小的官方域名。
+- 不得在日志、错误信息或 AI 提示中包含 Cookie / Token。
 - 禁止实现验证码、反自动化、风控或账户安全措施的绕过。
 - 不得提交真实 Cookie、Token、密码、API Key 或个人数据。
 - 优先使用稳定的 URL、表单字段和语义选择器，并同时处理“已签到”状态。
 
 ## 代码约定
 
-- 保持 TypeScript 类型完整，并复用 `src/shared/` 中的跨进程类型与 Schema。
+- 保持 TypeScript 类型完整，并复用 `src/shared/` 中的跨进程类型与 Schema；`src/main/core/` 必须保持平台无关（不得引入 Node 专用模块），以便电脑版和安卓版共用。
 - 新功能应提供与风险相称的单元、集成或端到端测试。
 - 不提交 `dist/`、`out/`、测试报告、浏览器档案或本地数据库。

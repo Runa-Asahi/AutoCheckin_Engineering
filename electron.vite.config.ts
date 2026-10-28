@@ -5,11 +5,11 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
-    build: { rollupOptions: { input: { index: resolve('src/main/index.ts'), 'browser/runner': resolve('src/main/browser/runner.ts') } } },
+    build: { rollupOptions: { input: { index: resolve('src/main/index.ts') } } },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
-    build: { rollupOptions: { input: { index: resolve('src/preload/index.ts'), security: resolve('src/preload/security.ts') }, output: { format: 'cjs', entryFileNames: '[name].cjs' } } },
+    build: { rollupOptions: { input: { index: resolve('src/preload/index.ts') }, output: { format: 'cjs', entryFileNames: '[name].cjs' } } },
   },
   renderer: {
     root: 'src/renderer',

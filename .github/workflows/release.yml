@@ -51,8 +51,13 @@ jobs:
             dist/*.deb
           if-no-files-found: error
 
+  android:
+    needs: verify
+    uses: ./.github/workflows/android.yml
+    secrets: inherit
+
   publish:
-    needs: build
+    needs: [build, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
