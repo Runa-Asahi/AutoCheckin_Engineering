@@ -4,7 +4,7 @@
 
 提供 **电脑版**（Windows / macOS / Linux）和 **安卓版**，同一套签到逻辑。数据只存在你自己的设备上。
 
-> 当前版本：**v2.0.0-alpha.3**（测试版 / 预发布）。正式版仍是 v1.1.1；v2 与 v1 数据不互通，需要重新添加账号。
+> 当前版本：**v2.0.0**。从 v1 升级时数据不互通，需要重新添加账号。
 
 <p>
   <img src="docs/images/mobile-02-home-accounts.png" width="240" alt="首页" />
@@ -22,18 +22,18 @@
 
 ## 下载
 
-从 [v2.0.0-alpha.3 发布页](https://github.com/Runa-Asahi/AutoCheckin_Engineering/releases/tag/v2.0.0-alpha.3) 下载：
+从 [v2.0.0 发布页](https://github.com/Runa-Asahi/AutoCheckin_Engineering/releases/tag/v2.0.0) 下载：
 
 | 系统 | 文件 |
 | --- | --- |
-| Windows | `AutoCheckin.Setup.2.0.0-alpha.3.exe` |
-| macOS（Apple 芯片） | `AutoCheckin-2.0.0-alpha.3-arm64.dmg` |
-| Linux | `AutoCheckin-2.0.0-alpha.3.AppImage` 或 `autocheckin_2.0.0-alpha.3_amd64.deb` |
-| 安卓 7.0 及以上 | `AutoCheckin-2.0.0-alpha.3-android.apk`（校验值见 `SHA256SUMS-android.txt`） |
+| Windows | `AutoCheckin.Setup.2.0.0.exe` |
+| macOS（Apple 芯片） | `AutoCheckin-2.0.0-arm64.dmg` |
+| Linux | `AutoCheckin-2.0.0.AppImage` 或 `autocheckin_2.0.0_amd64.deb` |
+| 安卓 7.0 及以上 | `AutoCheckin-2.0.0-android.apk`（校验值见 `SHA256SUMS-android.txt`） |
 | iOS | 暂不提供（需要 Apple 开发者签名） |
 
 - 安装包都没有经过商业代码签名：Windows 可能弹出 SmartScreen（点「更多信息 → 仍要运行」），macOS 首次打开需在 Finder 中右键 →「打开」。
-- 安卓 APK 为自签名测试包，需允许「安装未知来源应用」；可直接覆盖安装 alpha.2。
+- 安卓 APK 为自签名安装包（未上架应用商店），需允许「安装未知来源应用」；可直接覆盖安装 v2 测试版（alpha.2 / alpha.3）。
 
 ## 怎么用
 
@@ -78,7 +78,7 @@
 
 ## 已知限制
 
-- v2 仍是测试版：各平台接口随时可能变化。贴吧签到、安卓端登录（尤其「在 App 中确认」是否直接出现确认页，取决于官方 App 版本，不行请用「保存二维码到相册」）尚缺少真机验证。遇到问题请到 [PR #6](https://github.com/Runa-Asahi/AutoCheckin_Engineering/pull/6) 反馈（附运行结果，**不要贴 Cookie**）。
+- 各平台接口随时可能变化。贴吧签到、安卓端登录（尤其「在 App 中确认」是否直接出现确认页，取决于官方 App 版本，不行请用「保存二维码到相册」）尚缺少真机验证。遇到问题请到 [Issues](https://github.com/Runa-Asahi/AutoCheckin_Engineering/issues) 反馈（附运行结果，**不要贴 Cookie**）。
 - 电脑版只有在软件运行时才会定时签到；关机或退出期间错过的任务，下次打开时（当天内）会补签。
 - 安卓限制后台联网：不会在你完全不打开 App 的情况下后台签到。
 - 「保存二维码到相册」需要 Android 10 及以上。

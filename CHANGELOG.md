@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.0] - 2026-10-28
+
+v2 正式版（全新重写，取代 v1）。内容同 2.0.0-alpha.1 ~ alpha.3：
+- 支持网易云音乐、哔哩哔哩（扫码登录）、百度贴吧（官方登录页）；每项任务执行后再查询平台状态，确认成功才显示成功
+- 零配置界面；电脑版（Windows / macOS / Linux）与安卓版共用同一套签到核心
+- 安全：只在本机、HTTPS 官方域名白名单、登录信息加密保存（系统钥匙串 / Android Keystore）、不记录 Cookie、AI 只收脱敏结果
+
 ## 2.0.0-alpha.3（预发布）
 
 - 修复：百度贴吧登录校验失败「已拦截跳转到白名单外的地址」。原因是 `https://tieba.baidu.com/dc/common/tbs` 会 301 降级到 `http://`，被 HTTPS-only 策略拦截；现改为从 HTTPS 的 `/mo/q/newmoindex` 读取 tbs 与登录状态，白名单无需放宽
