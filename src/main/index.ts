@@ -10,12 +10,25 @@ import { randomUUID } from 'node:crypto'
 import { CheckinService } from './core/service.js'
 import { AIProviderConfigSchema, UpdateAccountSchema } from '../shared/schemas.js'
 import { createAppTray, resourcePath, type TrayController } from './tray.js'
+import { readFileSync, writeFileSync } from 'node:fs'
+import { detectLang, translate, type Lang, type LangPref, type MessageKey } from '../shared/i18n.js'
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 let tray: TrayController | null = null
 let mainWindow: BrowserWindow | null = null
 let allowQuit = false
 let timer: NodeJS.Timeout | undefined
+
+/** UI language: manual preference (userData/lang) or system locale (LC_ALL → LC_MESSAGES → LANG → app.getLocale()). */
+let systemLang: Lang = 'en'
+let langPref: LangPref = 'auto'
+const prefPath = (): string => join(app.getPath('userData'), 'lang')
+function loadLang(): void {
+  systemLang = detectLang(process.env, app.getLocale())
+  try { const v = readFileSync(prefPath(), 'utf8').trim(); if (v === 'zh' || v === 'en') langPref = v } catch { /* no preference saved */ }
+}
+const lang = (): Lang => (langPref === 'auto' ? systemLang : langPref)
+const t = (key: MessageKey, vars?: Record<string, string | number>): string => translate(lang(), key, vars)
 
 /**
  * 凭据加密：优先使用操作系统钥匙串（Windows DPAPI / macOS Keychain / Linux libsecret）。
@@ -40,7 +53,7 @@ function createCipher(): Cipher {
 function openWebLogin(platformId: string, login: WebLogin, parent: BrowserWindow | null): Promise<Record<string, string> | null> {
   return new Promise((resolve) => {
     const partition = `login-${randomUUID()}`
-    const window = new BrowserWindow({ width: 480, height: 720, parent: parent ?? undefined, modal: Boolean(parent), title: '登录', autoHideMenuBar: true, webPreferences: { partition, contextIsolation: true, nodeIntegration: false, sandbox: true } })
+    const window = new BrowserWindow({ width: 480, height: 720, parent: parent ?? undefined, modal: Boolean(parent), title: t('loginWindow'), autoHideMenuBar: true, webPreferences: { partition, contextIsolation: true, nodeIntegration: false, sandbox: true } })
     const allowed = (raw: string): boolean => { try { const host = new URL(raw).hostname; return login.domains.some((d) => host === d || host.endsWith(`.${d}`)) } catch { return false } }
     window.webContents.on('will-navigate', (event, url) => { if (!allowed(url)) event.preventDefault() })
     window.webContents.setWindowOpenHandler(({ url }) => { if (allowed(url)) void window.loadURL(url); return { action: 'deny' } })
@@ -89,6 +102,7 @@ function showMainWindow(): void {
 }
 
 async function start(): Promise<void> {
+  loadLang()
   const cipher = createCipher()
   if (!keychainAvailable) console.warn('系统钥匙串不可用，已改用本地密钥加密登录信息')
   const store = new Store(filePersistence(join(app.getPath('userData'), 'autocheckin-v2.json')), cipher)
@@ -106,9 +120,9 @@ async function start(): Promise<void> {
   ipcMain.handle('web:login', async (_e, platformId: string) => {
     const platform = getPlatform(String(platformId))
     const login = service.loginFor(platform.id)
-    if (!login) return { state: 'error', message: '该平台不支持网页登录' }
+    if (!login) return { state: 'error', message: t('noWebLogin') }
     const cookies = await openWebLogin(platform.id, login, mainWindow)
-    if (!cookies) return { state: 'expired', message: '登录窗口已关闭' }
+    if (!cookies) return { state: 'expired', message: t('loginWindowClosed') }
     return service.completeWebLogin(platform.id, cookies)
   })
   ipcMain.handle('qr:cancel', (_e, id: string) => service.cancelQrLogin(String(id)))
@@ -123,6 +137,13 @@ async function start(): Promise<void> {
     if (typeof raw.autoLaunch === 'boolean') applyAutoLaunch(raw.autoLaunch)
     return result
   })
+  ipcMain.handle('locale', () => ({ system: systemLang, pref: langPref, lang: lang() }))
+  ipcMain.handle('locale:set', (_e, pref: string) => {
+    langPref = pref === 'zh' || pref === 'en' ? pref : 'auto'
+    try { writeFileSync(prefPath(), langPref) } catch (e) { console.error(e) }
+    tray?.rebuild()
+    return { system: systemLang, pref: langPref, lang: lang() }
+  })
   ipcMain.handle('open-external', (_e, url: string) => { if (/^https:\/\//.test(String(url))) return shell.openExternal(String(url)) })
 
   const tick = (): void => { void service.tick().catch((error) => console.error('调度失败', error)) }
@@ -133,7 +154,8 @@ async function start(): Promise<void> {
       open: showMainWindow, checkNow: tick, quit: () => { allowQuit = true; app.quit() },
       autoLaunch: () => store.settings().autoLaunch,
       setAutoLaunch: (enabled) => { service.saveSettings({ autoLaunch: enabled }); applyAutoLaunch(enabled) },
-      status: () => `AutoCheckin · ${store.accounts().length} 个账号`,
+      status: () => t('trayStatus', { count: store.accounts().length }),
+      t,
     })
   } catch { tray = null }
   if (!process.argv.includes('--hidden') || !tray) showMainWindow()

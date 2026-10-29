@@ -59,6 +59,9 @@ export interface AutoCheckinApi {
   explainFailure(id: string): Promise<string>
   onAccountsChanged(callback: (accounts: AccountView[]) => void): () => void
   openExternal(url: string): Promise<void>
+  /** UI language info (desktop: from LC_ALL/LC_MESSAGES/LANG or OS locale). Optional: mobile uses navigator.language. */
+  locale?(): Promise<{ system: 'zh' | 'en'; pref: 'zh' | 'en' | 'auto'; lang: 'zh' | 'en' }>
+  setLocale?(pref: 'zh' | 'en' | 'auto'): Promise<{ system: 'zh' | 'en'; pref: 'zh' | 'en' | 'auto'; lang: 'zh' | 'en' }>
   /** 仅手机端：用官方 App 打开链接，false 表示没装 */
   openApp?(url: string): Promise<boolean>
   /** 仅手机端：把 data:image/png 保存到相册 */
