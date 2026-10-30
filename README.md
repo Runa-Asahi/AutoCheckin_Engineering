@@ -6,7 +6,7 @@
 
 提供 **电脑版**（Windows / macOS / Linux）和 **安卓版**，同一套签到逻辑。数据只存在你自己的设备上。
 
-> 当前版本：**v2.0.0**。从 v1 升级时数据不互通，需要重新添加账号。
+> 当前版本：**v2.0.1**。从 v1 升级时数据不互通，需要重新添加账号。
 
 <p>
   <img src="docs/images/mobile-02-home-accounts.png" width="240" alt="首页" />
@@ -24,14 +24,14 @@
 
 ## 下载
 
-从 [v2.0.0 发布页](https://github.com/Runa-Asahi/AutoCheckin_Engineering/releases/tag/v2.0.0) 下载：
+从 [v2.0.1 发布页](https://github.com/Runa-Asahi/AutoCheckin_Engineering/releases/tag/v2.0.1) 下载：
 
 | 系统 | 文件 |
 | --- | --- |
-| Windows | `AutoCheckin.Setup.2.0.0.exe` |
-| macOS（Apple 芯片） | `AutoCheckin-2.0.0-arm64.dmg` |
-| Linux | `AutoCheckin-2.0.0.AppImage` 或 `autocheckin_2.0.0_amd64.deb` |
-| 安卓 7.0 及以上 | `AutoCheckin-2.0.0-android.apk`（校验值见 `SHA256SUMS-android.txt`） |
+| Windows | `AutoCheckin.Setup.2.0.1.exe` |
+| macOS（Apple 芯片） | `AutoCheckin-2.0.1-arm64.dmg` |
+| Linux | `AutoCheckin-2.0.1.AppImage` 或 `autocheckin_2.0.1_amd64.deb` |
+| 安卓 7.0 及以上 | `AutoCheckin-2.0.1-android.apk`（校验值见 `SHA256SUMS-android.txt`） |
 | iOS | 暂不提供（需要 Apple 开发者签名） |
 
 - 安装包都没有经过商业代码签名：Windows 可能弹出 SmartScreen（点「更多信息 → 仍要运行」），macOS 首次打开需在 Finder 中右键 →「打开」。
