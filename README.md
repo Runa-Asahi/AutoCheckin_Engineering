@@ -1,5 +1,7 @@
 # AutoCheckin
 
+**English:** [README.en.md](README.en.md). Automatic daily check-ins for NetEase Cloud Music, Bilibili and Baidu Tieba; the desktop app shows an English UI outside Chinese locales.
+
 每天自动帮你签到。**扫码或用官方页面登录，不用填任何配置**；每一项任务做完都会再查一次平台状态，**确认真的成功了才显示成功**。
 
 提供 **电脑版**（Windows / macOS / Linux）和 **安卓版**，同一套签到逻辑。数据只存在你自己的设备上。

@@ -14,6 +14,8 @@ const api: AutoCheckinApi = {
   explainFailure: (id) => ipcRenderer.invoke('account:explain', id),
   settings: () => ipcRenderer.invoke('settings'),
   saveSettings: (input) => ipcRenderer.invoke('settings:save', input),
+  locale: () => ipcRenderer.invoke('locale'),
+  setLocale: (pref) => ipcRenderer.invoke('locale:set', pref),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   onAccountsChanged: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, accounts: AccountView[]): void => callback(accounts)
