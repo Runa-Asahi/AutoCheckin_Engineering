@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.0.1] - 2026-10-30
+
+- 电脑版界面语言跟随系统：中文环境显示中文，其他环境默认英文（Linux 按 LC_ALL → LC_MESSAGES → LANG，其次系统语言）；设置里可手动切换。新增英文说明 README.en.md
+- Desktop UI now follows the system locale: Chinese in zh* locales, English everywhere else (on Linux: LC_ALL → LC_MESSAGES → LANG, then the OS language), with a manual switch in Settings. Adds an English README (README.en.md)
+
 ## [2.0.0] - 2026-10-28
 
 v2 正式版（全新重写，取代 v1）。内容同 2.0.0-alpha.1 ~ alpha.3：
